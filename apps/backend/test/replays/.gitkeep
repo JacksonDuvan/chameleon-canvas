@@ -1,0 +1,3 @@
+# Fixtures de replay (*.json): comandos por tick + semilla, para los tests de
+# determinismo/golden (skill tdd-testing). Versionados a propósito: un golden que
+# cambia debe ser una decisión consciente. Se llenan en el Paso 2.

@@ -1,0 +1,25 @@
+{
+  "name": "@mecha/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kernel de simulación DETERMINISTA compartido por backend (autoritativo) y frontend (predicción): value-objects, entidades, step a 30 Hz, RNG con semilla y físicas Rapier tras un puerto. Es 'el package de dominio' que exige la skill authoritative-netcode.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core/index.ts",
+    "./physics": "./src/physics/IPhysicsWorld.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo 'no build: consumido como fuente TS por los apps (internal package)'"
+  },
+  "dependencies": {
+    "@mecha/shared": "workspace:*",
+    "@dimforge/rapier3d-compat": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

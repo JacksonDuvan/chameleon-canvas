@@ -1,0 +1,111 @@
+# ──────────────────────────────────────────────────────────────────────────
+#  Meccha Chameleon Clone — .gitignore (monorepo pnpm + TypeScript)
+#  Cloudflare Workers/DO (backend) · TanStack Start + R3F/Vite (frontend)
+# ──────────────────────────────────────────────────────────────────────────
+
+# ── Dependencias ─────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+# pnpm gestiona el lockfile: SÍ se versiona (no lo ignores)
+# pnpm-lock.yaml  <-- intencionalmente NO ignorado
+
+# ── Builds y artefactos de compilación ───────────────────────────────────
+dist/
+build/
+out/
+.output/
+.nitro/
+.vinxi/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ── Vite / TanStack Start (frontend) ─────────────────────────────────────
+.vite/
+.tanstack/
+.tanstack-start/
+apps/frontend/.output/
+apps/frontend/dist/
+
+# ── Cloudflare Workers / Wrangler (backend + frontend) ───────────────────
+.wrangler/
+.dev.vars
+.dev.vars.*
+wrangler.toml.bak
+# Tipos generados por `wrangler types` (regenerables; no se versionan)
+worker-configuration.d.ts
+**/worker-configuration.d.ts
+# Estado local de Miniflare / almacenamiento de DO en dev
+.mf/
+.miniflare/
+
+# ── Testing / cobertura (Vitest) ─────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+.vitest/
+html/
+__snapshots__/*.snap.tmp
+
+# ── WebAssembly (Rapier) — solo artefactos copiados/generados ─────────────
+# Los .wasm que vienen del paquete npm NO se versionan (los trae la install).
+# Si en el futuro se compila Rapier a mano, ignora la salida de build aquí.
+packages/physics/**/*.wasm
+apps/*/public/**/*.wasm.gz
+
+# ── Assets 3D pesados / pipeline (solo derivados; las fuentes .glb sí van) ─
+# Modelos optimizados generados por gltfjsx/draco se regeneran del .glb fuente.
+*.glb.draco
+*.glb.meshopt
+apps/frontend/public/models/**/*.optimized.glb
+
+# ── Variables de entorno y secretos ──────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+secrets/
+.secrets/
+
+# ── Logs ─────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ── Caches de herramientas ───────────────────────────────────────────────
+.cache/
+.turbo/
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# ── Editores / IDE ───────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ── Sistema operativo ────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Temporales ───────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.pid
+*.seed

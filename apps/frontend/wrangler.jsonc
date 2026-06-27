@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Worker SSR del cliente (TanStack Start). El adapter de Cloudflare lo gestiona
+  // @cloudflare/vite-plugin; los assets estáticos se sirven desde el build de Vite.
+  "name": "mecha-chameleon-frontend",
+  // Entry especial de TanStack Start (NO un archivo local).
+  "main": "@tanstack/react-start/server-entry",
+
+  // Misma fecha que el backend para paridad de runtime. ⚠ VERIFICAR (ver backend).
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"], // requerido por TanStack Start
+
+  "observability": {
+    "enabled": true
+  }
+}

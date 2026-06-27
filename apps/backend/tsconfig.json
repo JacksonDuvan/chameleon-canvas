@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    // Tipos del runtime de Workers. `wrangler types` además genera
+    // worker-configuration.d.ts (gitignored) con el tipo Env de los bindings.
+    "types": ["@cloudflare/workers-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@sim/*": ["../../packages/sim/src/*"]
+    }
+  },
+  "include": ["src/**/*", "worker-configuration.d.ts"]
+}

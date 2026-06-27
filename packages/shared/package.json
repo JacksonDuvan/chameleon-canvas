@@ -1,0 +1,24 @@
+{
+  "name": "@mecha/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Contratos de red compartidos: patrón Result, protocolo WebSocket, esquemas de Hono RPC (zod). Solo tipos/contratos puros — sin lógica de juego.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./result": "./src/result/index.ts",
+    "./protocol": "./src/protocol/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo 'no build: consumido como fuente TS por los apps (internal package)'"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

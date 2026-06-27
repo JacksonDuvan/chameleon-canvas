@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "// doc": "Opciones de compilador compartidas por TODO el monorepo. Cada workspace la extiende y añade SOLO lo propio (lib DOM en frontend, tipos de Workers en backend, sus path aliases). Ver docs/01-step-1-monorepo-setup.md.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    // Pureza/seguridad de tipos (refuerza el dominio determinista de las skills)
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Requisito de Hono RPC: import type explícito y borrado total en runtime.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    // Interop / DX
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "useDefineForClassFields": true,
+
+    // Los apps bundlean TS desde `src` (wrangler/esbuild + Vite); nadie emite .js
+    // por separado (patrón "internal packages"). Typecheck = `tsc --noEmit`.
+    "noEmit": true
+  }
+}

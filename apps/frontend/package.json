@@ -1,0 +1,40 @@
+{
+  "name": "@mecha/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cliente del juego: TanStack Start + React 19 + React Three Fiber (R3F v9) + Zustand vanilla. Predicción/interpolación sobre el kernel @mecha/sim.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@mecha/shared": "workspace:*",
+    "@mecha/sim": "workspace:*",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-start": "catalog:",
+    "hono": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "three": "catalog:",
+    "@react-three/fiber": "catalog:",
+    "@react-three/drei": "catalog:",
+    "zustand": "catalog:"
+  },
+  "devDependencies": {
+    "@mecha/backend": "workspace:*",
+    "@cloudflare/vite-plugin": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/three": "catalog:",
+    "vite": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "wrangler": "catalog:",
+    "typescript": "catalog:"
+  }
+}

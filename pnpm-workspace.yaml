@@ -1,0 +1,63 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# ──────────────────────────────────────────────────────────────────────────
+#  CATALOG — versiones centralizadas (pnpm catalogs).
+#  Cada package referencia con `catalog:` en su package.json en vez de fijar
+#  versiones sueltas. Cambiar una versión aquí la propaga a todo el monorepo.
+#
+#  NOTA DE VERIFICACIÓN (Paso 1): estas versiones son coherentes entre sí y
+#  modernas (2026), pero los pines EXACTOS deben confirmarse contra el registro
+#  npm al hacer la primera instalación. Los puntos marcados (⚠) son los de menor
+#  confianza — ver docs/01-step-1-monorepo-setup.md §"Puntos a verificar".
+# ──────────────────────────────────────────────────────────────────────────
+catalog:
+  # ── Toolchain / lenguaje ──
+  typescript: ^5.7.0
+  '@types/node': ^24.0.0
+
+  # ── Backend: Cloudflare Workers + Hono ──
+  hono: ^4.6.0
+  '@hono/zod-validator': ^0.4.0 # ⚠ alinear con la línea de Zod elegida
+  zod: ^3.24.0 # conservador y 100% compatible con el validator; upgrade a v4 documentado
+  wrangler: ^4.0.0 # v4: comandos `deploy` (no `publish`), new_sqlite_classes
+  '@cloudflare/workers-types': ^4.20241127.0
+  '@cloudflare/vitest-pool-workers': ^0.6.0 # ⚠ requiere Vitest >= 4.1
+
+  # ── Simulación / Físicas (Rapier WASM) ──
+  # PIN EXACTO (sin ^): servidor y cliente DEBEN usar la MISMA versión por
+  # determinismo cross-platform del netcode. ⚠ confirmar última versión en npm.
+  '@dimforge/rapier3d-compat': 0.14.0
+
+  # ── Frontend: TanStack Start + React 19 ──
+  '@tanstack/react-start': ^1.100.0
+  '@tanstack/react-router': ^1.100.0
+  react: ^19.0.0
+  react-dom: ^19.0.0
+  '@types/react': ^19.0.0
+  '@types/react-dom': ^19.0.0
+
+  # ── Frontend: render 3D ──
+  # R3F v9 + drei v10 son las líneas que soportan React 19 (v8/v9-drei son React 18).
+  three: ^0.171.0 # ⚠ three avanza ~mensual; alinear @types/three al mismo minor
+  '@types/three': ^0.171.0
+  '@react-three/fiber': ^9.0.0
+  '@react-three/drei': ^10.0.0
+  zustand: ^5.0.0 # store vanilla (zustand/vanilla) para el worldStore
+
+  # ── Build / Vite ──
+  vite: ^6.0.0 # ⚠ major debe alinear con @cloudflare/vite-plugin y TanStack Start
+  '@vitejs/plugin-react': ^4.3.0
+  '@cloudflare/vite-plugin': ^1.0.0
+  vite-tsconfig-paths: ^5.0.0 # resuelve los alias @shared/@sim/@ en Vite y Vitest
+
+  # ── Testing (Vitest) ──
+  vitest: ^4.1.0
+
+  # ── Lint / formato ──
+  eslint: ^9.0.0
+  '@typescript-eslint/eslint-plugin': ^8.0.0
+  '@typescript-eslint/parser': ^8.0.0
+  eslint-plugin-boundaries: ^5.0.0 # refuerza "las flechas apuntan hacia adentro"
+  prettier: ^3.3.0
