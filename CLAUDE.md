@@ -147,9 +147,13 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/00-initial-prompt.md`](docs/00-initial-prompt.md) — prompt fundacional (alcance + reglas).
 - [`docs/01-step-1-monorepo-setup.md`](docs/01-step-1-monorepo-setup.md) — qué se construyó en el Paso 1 (scaffolding), decisiones y árbol.
 - [`docs/02-step-2-backend-domain.md`](docs/02-step-2-backend-domain.md) — dominio netcode-first (sim determinista + use-cases), garantías de determinismo y verificación.
+- [`docs/03-step-3-durable-objects-sockets.md`](docs/03-step-3-durable-objects-sockets.md) — DO + sockets + wire binario (bucle 30 Hz, KEYFRAME/DELTA) y el toolchain de tests de DO (Vitest 4 + pool-workers).
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend
-(netcode-first: kernel `@mecha/sim` determinista + use-cases con Result/DI; tests TDD) ·
-Paso 3 ⏳ DO + sockets Hono (bucle 30 Hz, wire binario, broadcast de snapshots) ·
-Paso 4 ⏳ experiencia 3D (raycast color, predicción/interpolación, pipeline .glb).
+(netcode-first) · Paso 3 ✅ DO + sockets Hono (Hibernation API, bucle 30 Hz, wire
+binario KEYFRAME/DELTA, persistencia periódica; tests de DO en workerd) ·
+Paso 4 ⏳ experiencia 3D (consumir el wire: predicción/reconciliación/interpolación,
+raycast color, pipeline .glb).
 Al continuar en otra sesión: lee `docs/` y la skill relevante, y respeta el plan.
+
+**Comandos de test:** `pnpm test` (node: shared/sim/backend) · `pnpm --filter @mecha/backend test:do` (DO en workerd) · `pnpm typecheck` · `pnpm lint`.

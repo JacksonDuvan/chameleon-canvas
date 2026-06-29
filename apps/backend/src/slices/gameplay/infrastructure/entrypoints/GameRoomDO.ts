@@ -1,82 +1,285 @@
 /**
  * GameRoomDO — Durable Object: UNA instancia = UNA sala de juego.
  *
- * Es el adaptador driving central del backend y la COMPOSITION ROOT del slice:
- * instancia los adaptadores concretos (driven) y los inyecta en los use-cases por
- * constructor (DI). Contiene el mundo autoritativo, los sockets y el bucle de tick.
+ * Adaptador driving central + COMPOSITION ROOT del slice. Contiene el mundo
+ * autoritativo (en memoria), los sockets (Hibernation API) y el bucle de tick a 30 Hz.
  *
- * Skills: `authoritative-netcode` (Hibernation API, bucle a 30 Hz con setInterval
- * solo mientras la partida está viva, auto-respuesta a pings, estado volátil
- * persistido) + `hexagonal-vertical-slicing` (DI por constructor) +
- * `workers-memory-optimization` (constructor barato; se re-ejecuta en cada wake).
- *
- * SCAFFOLD del Paso 1 — handlers, bucle y persistencia se implementan en el Paso 3.
+ * Skills:
+ *  - `authoritative-netcode`: el servidor calcula todo a partir de inputs; tick fijo
+ *    30 Hz; Hibernation API (`acceptWebSocket`, handlers `webSocket*`); snapshots
+ *    DELTA + KEYFRAME con `lastProcessedInput` por jugador; auto-respuesta a pings.
+ *  - `workers-memory-optimization`: el bucle NO hace I/O ni asigna por tick; el estado
+ *    vive en memoria y se persiste de forma periódica; constructor barato (se re-ejecuta
+ *    en cada wake), estado por conexión vía `serializeAttachment`.
+ *  - `hexagonal-vertical-slicing`: el DO traduce protocolo y delega en use-cases y en
+ *    el dominio (`step`); cero reglas de juego aquí. DI por constructor.
  */
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '@/shared/env';
-import { ProcessTick } from '@/slices/gameplay/use-cases/ProcessTick';
+import { Room } from '@/slices/gameplay/domain/entities/Room';
 import { DoStorageRoomRepository } from '@/slices/gameplay/infrastructure/adapters/DoStorageRoomRepository';
-import type { IRoomRepository } from '@/slices/gameplay/domain/ports/IRoomRepository';
-import { KinematicPhysicsWorld, type IPhysicsWorld } from '@mecha/sim';
+import { SingleRoomRepository } from '@/slices/gameplay/infrastructure/adapters/SingleRoomRepository';
+import { PlayerJoin } from '@/slices/gameplay/use-cases/PlayerJoin';
+import { StartGame } from '@/slices/gameplay/use-cases/StartGame';
+import { ChangeColor } from '@/slices/gameplay/use-cases/ChangeColor';
+import { KvMonetizationAdapter } from '@/slices/monetization/infrastructure/KvMonetizationAdapter';
+import {
+  step,
+  makeRng,
+  removePlayer,
+  KinematicPhysicsWorld,
+  type Rng,
+  type IPhysicsWorld,
+} from '@mecha/sim';
+import {
+  decodeInput,
+  encodeKeyframe,
+  encodeDelta,
+  captureBaseline,
+  type Baseline,
+  type UserCommand,
+} from '@shared/protocol';
 
-const TICK_MS = 1000 / 30; // 30 Hz autoritativo
+const TICK_HZ = 30;
+const TICK_MS = 1000 / TICK_HZ;
+const DT = 1 / TICK_HZ;
+const KEYFRAME_EVERY = TICK_HZ; // un keyframe ~cada segundo
+const PERSIST_EVERY = TICK_HZ * 2; // persistir ~cada 2 s
+
+interface Attachment {
+  playerId: string;
+}
 
 export class GameRoomDO extends DurableObject<Env> {
-  private readonly rooms: IRoomRepository;
+  // Borde (driven) + cache viva en memoria.
+  private readonly live: SingleRoomRepository;
+  private readonly persist: DoStorageRoomRepository;
   private readonly physics: IPhysicsWorld;
-  private readonly processTick: ProcessTick;
+  private readonly rng: Rng;
+  // Use-cases (cableados por constructor sobre la cache viva).
+  private readonly playerJoin: PlayerJoin;
+  private readonly startGame: StartGame;
+  private readonly changeColor: ChangeColor;
+
+  // Estado del bucle (volátil; se reconstruye tras un wake).
   private loop: ReturnType<typeof setInterval> | null = null;
+  private readonly inbox: UserCommand[] = []; // inputs recibidos desde el último tick
+  private baseline: Baseline | null = null;
+  private ticksSinceKeyframe = 0;
+  private ticksSincePersist = 0;
+  private forceKeyframe = true;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    // ── Composition root: construir adaptadores (driven) e inyectarlos ──
-    this.rooms = new DoStorageRoomRepository(ctx.storage);
-    // Físicas ligeras para el MVP (puro TS, determinista, sin WASM). Cuando haga
-    // falta colisión rica contra geometría compleja se sustituye por
-    // RapierPhysicsWorld (initRapier en blockConcurrencyWhile) — mismo puerto.
-    const capacity = Number(env.MAX_PLAYERS_PER_ROOM) || 16;
-    this.physics = new KinematicPhysicsWorld(capacity);
-    this.processTick = new ProcessTick(this.rooms, this.physics);
+    this.live = new SingleRoomRepository();
+    this.persist = new DoStorageRoomRepository(ctx.storage);
+    this.physics = new KinematicPhysicsWorld(Number(env.MAX_PLAYERS_PER_ROOM) || 16);
+    this.rng = makeRng(0);
+    const monet = new KvMonetizationAdapter(env.MONET_KV);
+    this.playerJoin = new PlayerJoin(this.live, monet);
+    this.startGame = new StartGame(this.live);
+    this.changeColor = new ChangeColor(this.live);
 
     // Heartbeat sin despertar la sala hibernada.
-    // ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+
+    // Rehidratar la sala persistida tras un wake (barato; idempotente).
+    ctx.blockConcurrencyWhile(async () => {
+      const rid = await ctx.storage.get<string>('roomId');
+      if (!rid) return;
+      const loaded = await this.persist.load(rid);
+      if (loaded.ok && loaded.value) this.live.set(loaded.value);
+    });
   }
 
-  override async fetch(_req: Request): Promise<Response> {
+  override async fetch(req: Request): Promise<Response> {
+    if (req.headers.get('Upgrade') !== 'websocket') {
+      return new Response('Expected WebSocket upgrade', { status: 426 });
+    }
+    const url = new URL(req.url);
+    const parts = url.pathname.split('/');
+    const roomId = parts[parts.indexOf('rooms') + 1] ?? url.searchParams.get('room') ?? '';
+    if (!roomId) return new Response('Missing room id', { status: 400 });
+
+    await this.ensureRoom(roomId);
+
+    const name = url.searchParams.get('name') ?? 'Player';
+    const playerId = this.newPlayerId();
+    const join = await this.playerJoin.execute({ roomId, playerId, displayName: name });
+    if (!join.ok) {
+      return new Response(JSON.stringify({ error: join.error.kind }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1]); // hibernable (NO ws.accept())
-    // pair[1].serializeAttachment({ playerId, joinedTick: ... }); // sobrevive a hibernación
+    const server = pair[1]!;
+    this.ctx.acceptWebSocket(server); // hibernable (NUNCA server.accept())
+    server.serializeAttachment({ playerId } satisfies Attachment);
+    server.send(JSON.stringify({ type: 'welcome', playerId, roomId }));
+
+    this.forceKeyframe = true; // el nuevo jugador necesita estado completo
     this.ensureLoop();
-    return new Response(null, { status: 101, webSocket: pair[0] });
+    return new Response(null, { status: 101, webSocket: pair[0]! });
   }
 
-  override webSocketMessage(_ws: WebSocket, _data: ArrayBuffer | string): void {
-    // TODO(Paso 3): decodificar UserCommand (binario) y encolarlo para el próximo tick.
+  override async webSocketMessage(ws: WebSocket, data: ArrayBuffer | string): Promise<void> {
+    const playerId = (ws.deserializeAttachment() as Attachment | null)?.playerId;
+    if (!playerId) return;
+
+    // Un mensaje puede despertar el DO tras hibernar SIN pasar por fetch: el bucle es
+    // estado volátil y se pierde al hibernar. Re-arráncalo aquí o el input se
+    // acumularía en `inbox` sin simularse jamás (pérdida silenciosa de input).
+    this.ensureLoop();
+
+    if (typeof data === 'string') {
+      await this.handleControl(ws, playerId, data); // control raro (JSON)
+      return;
+    }
+    // Camino caliente: INPUT binario. El servidor adjunta el playerId de la conexión
+    // (el cliente NO puede declararlo → anti-spoofing).
+    const payload = decodeInput(data);
+    this.inbox.push({ ...payload, playerId });
   }
 
-  override webSocketClose(_ws: WebSocket): void {
-    // TODO(Paso 3): quitar jugador; si la sala queda vacía, detener el bucle.
+  override webSocketClose(ws: WebSocket): void {
+    this.dropConnection(ws);
+  }
+
+  override webSocketError(ws: WebSocket): void {
+    this.dropConnection(ws);
+  }
+
+  // ── Internos ──
+
+  private async ensureRoom(roomId: string): Promise<void> {
+    if (this.live.current()?.id === roomId) return;
+    const loaded = await this.persist.load(roomId);
+    if (loaded.ok && loaded.value) {
+      this.live.set(loaded.value);
+    } else {
+      this.live.set(new Room(roomId));
+      await this.ctx.storage.put('roomId', roomId);
+    }
+  }
+
+  private newPlayerId(): string {
+    // ASCII corto y sin colisiones prácticas (el wire usa ids ASCII).
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+  }
+
+  private async handleControl(ws: WebSocket, playerId: string, raw: string): Promise<void> {
+    let msg: { type?: string; r?: number; g?: number; b?: number; a?: number };
+    try {
+      msg = JSON.parse(raw) as typeof msg;
+    } catch {
+      return; // mensaje malformado: ignorar
+    }
+    const room = this.live.current();
+    if (!room) return;
+    // Los use-cases devuelven Result; si fallan (NotHost, WrongPhase, ColorLocked,
+    // StorageError…) se avisa al cliente con un frame de error (no se silencia).
+    if (msg.type === 'start') {
+      const res = await this.startGame.execute({ roomId: room.id, playerId });
+      if (res.ok) this.forceKeyframe = true;
+      else ws.send(JSON.stringify({ type: 'error', cmd: 'start', kind: res.error.kind }));
+    } else if (msg.type === 'color') {
+      const res = await this.changeColor.execute({
+        roomId: room.id,
+        playerId,
+        r: msg.r ?? 0,
+        g: msg.g ?? 0,
+        b: msg.b ?? 0,
+        a: msg.a ?? 255,
+      });
+      if (!res.ok) ws.send(JSON.stringify({ type: 'error', cmd: 'color', kind: res.error.kind }));
+    }
+  }
+
+  private dropConnection(ws: WebSocket): void {
+    const playerId = (ws.deserializeAttachment() as Attachment | null)?.playerId;
+    const room = this.live.current();
+    if (playerId && room) {
+      removePlayer(room.world, playerId);
+      room.roster.delete(playerId);
+      this.forceKeyframe = true; // cambió el roster → el delta ya no es válido
+    }
+    try {
+      ws.close();
+    } catch {
+      /* ya cerrado */
+    }
     this.stopLoopIfEmpty();
   }
 
-  override webSocketError(_ws: WebSocket): void {
-    this.stopLoopIfEmpty();
-  }
-
-  /** Arranca el bucle de 30 Hz mientras la partida está viva (impide hibernar a propósito). */
+  /**
+   * Arranca el bucle de 30 Hz mientras la partida está viva (impide hibernar a
+   * propósito). Idempotente. Suposición de runtime MONOHILO: `setInterval` y los
+   * handlers de WebSocket se ejecutan secuencialmente sin reentrada; no añadir
+   * `async/await` dentro de `tick()` sin sincronizar el estado del bucle.
+   */
   private ensureLoop(): void {
     if (this.loop) return;
-    this.loop = setInterval(() => {
-      // TODO(Paso 3): vaciar cola de inputs → processTick.execute(dt) → broadcast delta.
-      void this.processTick;
-      void TICK_MS;
-    }, TICK_MS);
+    this.loop = setInterval(() => this.tick(), TICK_MS);
   }
 
   private stopLoopIfEmpty(): void {
-    if (this.loop && this.ctx.getWebSockets().length === 0) {
+    if (this.ctx.getWebSockets().length > 0) return;
+    if (this.loop) {
       clearInterval(this.loop);
-      this.loop = null; // la sala queda elegible para hibernar
+      this.loop = null;
     }
+    // Persistir el estado final antes de quedar elegible para hibernar.
+    const room = this.live.current();
+    if (room) void this.persist.save(room);
+  }
+
+  /** Un tick autoritativo: drena inputs → simula (sync) → transmite → persiste a veces. */
+  private tick(): void {
+    if (!this.loop) return; // defensivo: no simular si el bucle ya fue detenido
+    const room = this.live.current();
+    if (!room) return;
+
+    // 1) Simulación determinista (sin I/O, sin asignar). RNG enhebrado vía world.rngState.
+    this.rng.setState(room.world.rngState);
+    step(room.world, this.inbox, DT, this.rng, this.physics);
+    room.world.rngState = this.rng.getState();
+    this.inbox.length = 0; // reutiliza el array (sin reasignar)
+
+    // 2) Transmitir: KEYFRAME (recién unidos / roster cambiado / periódico) o DELTA.
+    this.broadcast(room);
+
+    // 3) Persistencia periódica (fuera del camino crítico del tick).
+    if (++this.ticksSincePersist >= PERSIST_EVERY) {
+      this.ticksSincePersist = 0;
+      void this.persist.save(room);
+    }
+  }
+
+  private broadcast(room: Room): void {
+    const sockets = this.ctx.getWebSockets();
+    if (sockets.length === 0) return;
+
+    // KEYFRAME si el roster cambió (forceKeyframe / tamaño distinto a la base),
+    // periódicamente, o si no hay base. DELTA en el resto.
+    const rosterChanged = this.baseline === null || this.baseline.size !== room.world.players.size;
+    const sendKeyframe = this.forceKeyframe || rosterChanged || ++this.ticksSinceKeyframe >= KEYFRAME_EVERY;
+    // Una sola codificación para TODOS (cada jugador lee su propio lastProcessedInput).
+    // .slice() copia fuera del buffer pooleado: seguro para enviar a varios sockets y
+    // para que el próximo tick reescriba el buffer sin corromper envíos en vuelo.
+    const buf = (sendKeyframe ? encodeKeyframe(room.world) : encodeDelta(this.baseline!, room.world)).slice();
+    if (sendKeyframe) {
+      this.forceKeyframe = false;
+      this.ticksSinceKeyframe = 0;
+    }
+    for (let i = 0; i < sockets.length; i++) {
+      try {
+        sockets[i]!.send(buf);
+      } catch {
+        /* socket cerrándose: lo limpiará webSocketClose */
+      }
+    }
+    this.baseline = captureBaseline(room.world);
   }
 }

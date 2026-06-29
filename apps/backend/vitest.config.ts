@@ -8,7 +8,11 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
-    include: ['src/slices/**/{domain,use-cases}/**/*.test.ts'],
+    // Capas puras (node, rápido): dominio, use-cases y adaptadores SIN runtime de Workers.
+    include: [
+      'src/slices/**/{domain,use-cases}/**/*.test.ts',
+      'src/slices/**/infrastructure/adapters/**/*.test.ts',
+    ],
     environment: 'node',
   },
 });

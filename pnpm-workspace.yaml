@@ -23,7 +23,7 @@ catalog:
   zod: ^3.24.0 # conservador y 100% compatible con el validator; upgrade a v4 documentado
   wrangler: ^4.0.0 # v4: comandos `deploy` (no `publish`), new_sqlite_classes
   '@cloudflare/workers-types': ^4.20241127.0
-  '@cloudflare/vitest-pool-workers': ^0.6.0 # ⚠ requiere Vitest >= 4.1
+  '@cloudflare/vitest-pool-workers': ^0.16.20 # peer vitest ^4.1 (alineado con Vitest 4.1.9)
 
   # ── Simulación / Físicas (Rapier WASM) ──
   # PIN EXACTO (sin ^): servidor y cliente DEBEN usar la MISMA versión por

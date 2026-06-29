@@ -12,7 +12,7 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run -c vitest.config.ts",
-    "test:do": "vitest run -c vitest.workers.config.ts --no-isolate --poolOptions.workers.singleWorker",
+    "test:do": "vitest run -c vitest.workers.config.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

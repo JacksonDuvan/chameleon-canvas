@@ -12,5 +12,8 @@
       "@sim/*": ["../../packages/sim/src/*"]
     }
   },
-  "include": ["src/**/*", "worker-configuration.d.ts"]
+  "include": ["src/**/*", "worker-configuration.d.ts"],
+  // Los tests de entrypoints usan `cloudflare:test` (tipos de pool-workers, no en el
+  // typecheck de producción). Se tipan vía test/tsconfig.json y se ejecutan en workerd.
+  "exclude": ["src/slices/**/infrastructure/entrypoints/**/*.test.ts"]
 }
