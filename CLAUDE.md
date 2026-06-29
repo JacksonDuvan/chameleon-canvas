@@ -148,12 +148,14 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/01-step-1-monorepo-setup.md`](docs/01-step-1-monorepo-setup.md) — qué se construyó en el Paso 1 (scaffolding), decisiones y árbol.
 - [`docs/02-step-2-backend-domain.md`](docs/02-step-2-backend-domain.md) — dominio netcode-first (sim determinista + use-cases), garantías de determinismo y verificación.
 - [`docs/03-step-3-durable-objects-sockets.md`](docs/03-step-3-durable-objects-sockets.md) — DO + sockets + wire binario (bucle 30 Hz, KEYFRAME/DELTA) y el toolchain de tests de DO (Vitest 4 + pool-workers).
+- [`docs/04-step-4-client-3d.md`](docs/04-step-4-client-3d.md) — cliente 3D R3F + netcode cliente (predicción/reconciliación/interpolación, InstancedMesh, cuentagotas), Vite 7.
 
-**Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend
-(netcode-first) · Paso 3 ✅ DO + sockets Hono (Hibernation API, bucle 30 Hz, wire
-binario KEYFRAME/DELTA, persistencia periódica; tests de DO en workerd) ·
-Paso 4 ⏳ experiencia 3D (consumir el wire: predicción/reconciliación/interpolación,
-raycast color, pipeline .glb).
-Al continuar en otra sesión: lee `docs/` y la skill relevante, y respeta el plan.
+**Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
+DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente (predicción/
+reconciliación/interpolación; movimiento compartido para paridad; tests fuera de React).
+**Los 4 pasos del prompt están completos.** Siguientes: verificación visual en navegador,
+pipeline `.glb` (Draco/Meshopt + gltfjsx), matchmaking UI, y cableado de monetización
+(ver `docs/04` §7).
+Al continuar en otra sesión: lee `docs/` y la skill relevante.
 
 **Comandos de test:** `pnpm test` (node: shared/sim/backend) · `pnpm --filter @mecha/backend test:do` (DO en workerd) · `pnpm typecheck` · `pnpm lint`.

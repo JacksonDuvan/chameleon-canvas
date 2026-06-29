@@ -47,8 +47,8 @@ catalog:
   zustand: ^5.0.0 # store vanilla (zustand/vanilla) para el worldStore
 
   # ── Build / Vite ──
-  vite: ^6.0.0 # ⚠ major debe alinear con @cloudflare/vite-plugin y TanStack Start
-  '@vitejs/plugin-react': ^4.3.0
+  vite: ^7.0.0 # requerido por @tanstack/react-start; compatible con @cloudflare/vite-plugin y Vitest 4
+  '@vitejs/plugin-react': ^4.7.0 # peer vite incluye ^7
   '@cloudflare/vite-plugin': ^1.0.0
   vite-tsconfig-paths: ^5.0.0 # resuelve los alias @shared/@sim/@ en Vite y Vitest
 

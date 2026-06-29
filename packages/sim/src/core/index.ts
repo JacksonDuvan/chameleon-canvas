@@ -6,5 +6,6 @@ export * from './entities/WorldState';
 export * from './config';
 export * from './collision';
 export * from './rng';
+export * from './movement';
 export * from './phases';
 export * from './step';

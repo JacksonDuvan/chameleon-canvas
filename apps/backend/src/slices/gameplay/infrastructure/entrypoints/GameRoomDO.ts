@@ -67,6 +67,7 @@ export class GameRoomDO extends DurableObject<Env> {
   private baseline: Baseline | null = null;
   private ticksSinceKeyframe = 0;
   private ticksSincePersist = 0;
+  private ticksSinceReconcile = 0;
   private forceKeyframe = true;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -113,11 +114,12 @@ export class GameRoomDO extends DurableObject<Env> {
       });
     }
 
+    const isHost = join.value.roster.get(playerId)?.isHost ?? false;
     const pair = new WebSocketPair();
     const server = pair[1]!;
     this.ctx.acceptWebSocket(server); // hibernable (NUNCA server.accept())
     server.serializeAttachment({ playerId } satisfies Attachment);
-    server.send(JSON.stringify({ type: 'welcome', playerId, roomId }));
+    server.send(JSON.stringify({ type: 'welcome', playerId, roomId, isHost }));
 
     this.forceKeyframe = true; // el nuevo jugador necesita estado completo
     this.ensureLoop();
@@ -158,6 +160,7 @@ export class GameRoomDO extends DurableObject<Env> {
     const loaded = await this.persist.load(roomId);
     if (loaded.ok && loaded.value) {
       this.live.set(loaded.value);
+      this.reconcileRoster(); // poda jugadores persistidos que ya no están conectados
     } else {
       this.live.set(new Room(roomId));
       await this.ctx.storage.put('roomId', roomId);
@@ -203,6 +206,11 @@ export class GameRoomDO extends DurableObject<Env> {
     if (playerId && room) {
       removePlayer(room.world, playerId);
       room.roster.delete(playerId);
+      if (room.hostId === playerId) {
+        // El host se fue: pásalo al primer jugador que quede y avísale.
+        room.hostId = room.roster.keys().next().value ?? null;
+        if (room.hostId) this.notifyHost(room.hostId);
+      }
       this.forceKeyframe = true; // cambió el roster → el delta ya no es válido
     }
     try {
@@ -211,6 +219,56 @@ export class GameRoomDO extends DurableObject<Env> {
       /* ya cerrado */
     }
     this.stopLoopIfEmpty();
+  }
+
+  /**
+   * Reconcilia el roster con los sockets VIVOS (`getWebSockets`), la única verdad de
+   * quién está conectado: elimina jugadores fantasma (cierres abruptos sin `close`,
+   * estado persistido viejo), reasigna el host si se fue, y resetea la sala a Lobby si
+   * queda vacía (evita reconectar a una partida fantasma). Devuelve true si cambió algo.
+   */
+  private reconcileRoster(): boolean {
+    const room = this.live.current();
+    if (!room) return false;
+    const live = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      const pid = (ws.deserializeAttachment() as Attachment | null)?.playerId;
+      if (pid) live.add(pid);
+    }
+    let changed = false;
+    for (const id of [...room.world.players.keys()]) {
+      if (!live.has(id)) {
+        removePlayer(room.world, id);
+        room.roster.delete(id);
+        changed = true;
+      }
+    }
+    if (room.hostId !== null && !live.has(room.hostId)) {
+      room.hostId = room.roster.keys().next().value ?? null;
+      if (room.hostId) this.notifyHost(room.hostId);
+      changed = true;
+    }
+    if (changed && room.world.players.size === 0) {
+      room.world.phase = 'lobby';
+      room.world.phaseEndsAtTick = 0;
+      room.world.outcome = 'none';
+      room.hostId = null;
+    }
+    return changed;
+  }
+
+  /** Avisa al nuevo host para que su cliente habilite "Empezar". */
+  private notifyHost(playerId: string): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      if ((ws.deserializeAttachment() as Attachment | null)?.playerId === playerId) {
+        try {
+          ws.send(JSON.stringify({ type: 'host', isHost: true }));
+        } catch {
+          /* socket cerrándose */
+        }
+        return;
+      }
+    }
   }
 
   /**
@@ -240,6 +298,13 @@ export class GameRoomDO extends DurableObject<Env> {
     if (!this.loop) return; // defensivo: no simular si el bucle ya fue detenido
     const room = this.live.current();
     if (!room) return;
+
+    // 0) Reconciliar el roster con los sockets vivos (~1 s): limpia fantasmas de
+    //    cierres abruptos que no dispararon webSocketClose.
+    if (++this.ticksSinceReconcile >= KEYFRAME_EVERY) {
+      this.ticksSinceReconcile = 0;
+      if (this.reconcileRoster()) this.forceKeyframe = true;
+    }
 
     // 1) Simulación determinista (sin I/O, sin asignar). RNG enhebrado vía world.rngState.
     this.rng.setState(room.world.rngState);

@@ -1,11 +1,16 @@
 /**
- * Scene — raíz del mundo 3D (dentro de <Canvas>). Compone Environment + avatares.
- * Skill `r3f-rendering`: nada de setState por frame; el movimiento se muta sobre
- * refs en useFrame leyendo worldStore vía getState()/subscribe transitorio.
- *
- * SCAFFOLD del Paso 1 — Paso 4.
+ * Scene — raíz del mundo 3D (contenido del <Canvas>). Compone el escenario y los
+ * avatares. No posee estado de juego: lee `worldStore` (skill `r3f-rendering` +
+ * `hexagonal-vertical-slicing`: el render es un adaptador driven).
  */
+import { Environment } from './Environment';
+import { Players } from './MechaMesh';
+
 export function Scene() {
-  // TODO(Paso 4): <Environment/>, jugadores (MechaMesh), proyectiles con InstancedMesh.
-  return null;
+  return (
+    <>
+      <Environment />
+      <Players />
+    </>
+  );
 }

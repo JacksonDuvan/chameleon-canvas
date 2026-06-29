@@ -1,52 +1,24 @@
 /**
  * `step` — UN tick determinista de la simulación. Corazón compartido del netcode:
- * lo ejecuta el servidor (autoritativo, `ProcessTick`) y lo re-ejecuta el cliente
- * (predicción) con EL MISMO código y los mismos `dt`/semilla.
+ * lo ejecuta el servidor (autoritativo, `ProcessTick`) y reutiliza las MISMAS
+ * funciones de movimiento (`@sim/core/movement`) que el cliente usa para predecir.
  *
- * Responsabilidades del MVP (Step 2): aplicar inputs (movimiento con clamp
- * anti-trampas), reglas por fase, "disparo" del Seeker que registra impacto por
- * raycast (vía el puerto), y la transición temporizada de fase.
+ * Responsabilidades del MVP: aplicar inputs (apunte + movimiento con clamp), reglas
+ * por fase, "disparo" del Seeker que registra impacto por raycast (vía el puerto), y
+ * la transición temporizada de fase.
  *
  * Skills: `authoritative-netcode` (servidor autoritativo, timestep fijo, input =
- * intención) + `workers-memory-optimization` (muta el estado, scratch de módulo,
- * `for` indexado, sin asignaciones por-tick) + `hexagonal-vertical-slicing` (puro;
- * la física entra por el puerto `IPhysicsWorld`).
+ * intención) + `workers-memory-optimization` (muta el estado, sin asignaciones
+ * por-tick) + `hexagonal-vertical-slicing` (puro; la física entra por el puerto).
  *
  * El mundo se MUTA in situ (no se devuelve uno nuevo).
  */
 import type { WorldState } from './entities/WorldState';
-import type { PlayerState } from './entities/PlayerState';
-import type { SimConfig } from './config';
 import type { Rng } from './rng';
 import type { IPhysicsWorld } from '../physics/IPhysicsWorld';
-import { clampToBoundsMut } from './collision';
 import { advancePhaseIfDue } from './phases';
-import { ActionKind, type GamePhase, type UserCommand } from '@shared/protocol';
-import { Vec3 } from './value-objects/Vec3';
-
-// Scratch de ámbito de módulo: `step` es síncrono de principio a fin en un isolate
-// monohilo, así que reutilizar estos vectores entre ticks (y entre salas del mismo
-// isolate) es seguro y evita asignar por jugador/tick.
-const _dir = new Vec3();
-const _aim = new Vec3();
-
-/** ¿Puede moverse este jugador en la fase actual? (reglas de Meccha Chameleon). */
-function canMove(phase: GamePhase, p: PlayerState): boolean {
-  if (p.frozen) return false;
-  if (phase === 'prep') return p.role === 'hider'; // Hiders se mueven; Seekers esperan a ciegas
-  if (phase === 'hunt') return p.role === 'seeker'; // Seekers cazan; Hiders congelados
-  return false; // lobby / ended
-}
-
-function applyMovement(p: PlayerState, cmd: UserCommand, cfg: SimConfig, dt: number): void {
-  _dir.setMut(cmd.moveX, 0, cmd.moveZ);
-  const len = _dir.length();
-  if (len > 1) _dir.scaleMut(1 / len); // clamp de la intención a magnitud 1 (anti-trampas)
-  _dir.scaleMut(cfg.maxSpeed); // velocidad máxima autoritativa
-  p.vel.copyFromMut(_dir);
-  p.pos.addScaledMut(p.vel, dt); // pos += vel * dt
-  clampToBoundsMut(p.pos, cfg.bounds); // clamp a los límites del escenario
-}
+import { applyAim, applyMovement, canMove } from './movement';
+import { ActionKind, type UserCommand } from '@shared/protocol';
 
 export function step(
   world: WorldState,
@@ -58,7 +30,7 @@ export function step(
   world.tick++;
   const cfg = world.config;
 
-  // ── Pase 1: aplicar inputs (movimiento + acciones que no son raycast) ──
+  // ── Pase 1: aplicar inputs (apunte + movimiento + acciones que no son raycast) ──
   let anyCatch = false;
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i];
@@ -67,16 +39,7 @@ export function step(
     if (!p) continue;
 
     p.lastProcessedInput = cmd.seq; // estampa para la reconciliación del cliente
-    // El servidor es autoritativo: NO confía en que el cliente normalice el apunte.
-    // Re-normaliza aquí (raySphere asume dirección unitaria). Conserva el apunte
-    // anterior si el cliente envía un vector cero.
-    _aim.setMut(cmd.aimX, 0, cmd.aimZ);
-    if (_aim.lengthSq() > 0) {
-      _aim.normalizeMut();
-      p.aimX = _aim.x;
-      p.aimZ = _aim.z;
-    }
-
+    applyAim(p, cmd); // re-normaliza el apunte (mismas funciones que la predicción)
     if (canMove(world.phase, p)) applyMovement(p, cmd, cfg, dt);
 
     if (cmd.action === ActionKind.FREEZE && p.role === 'hider') {

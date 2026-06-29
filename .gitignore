@@ -26,6 +26,8 @@ tsconfig.tsbuildinfo
 .tanstack-start/
 apps/frontend/.output/
 apps/frontend/dist/
+# Árbol de rutas generado por el plugin de TanStack Start (regenerable)
+**/routeTree.gen.ts
 
 # ── Cloudflare Workers / Wrangler (backend + frontend) ───────────────────
 .wrangler/
