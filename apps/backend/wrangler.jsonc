@@ -39,13 +39,16 @@
       "id": "<RELLENAR: wrangler kv namespace create MONET_KV>"
     }
   ],
-  // R2: texturas/cosméticos premium custom.
-  "r2_buckets": [
-    {
-      "binding": "COSMETICS_R2",
-      "bucket_name": "mecha-cosmetics"
-    }
-  ],
+  // R2: texturas/cosméticos premium custom. POSPUESTO (P3 — aún no se usa en runtime).
+  // R2 exige activarlo en el dashboard; lo dejamos comentado para no bloquear el primer
+  // deploy. Para reactivar: crea el bucket (`wrangler r2 bucket create mecha-cosmetics`)
+  // y descomenta este bloque.
+  // "r2_buckets": [
+  //   {
+  //     "binding": "COSMETICS_R2",
+  //     "bucket_name": "mecha-cosmetics"
+  //   }
+  // ],
 
   // Variables de juego. El tick autoritativo es 30 Hz (skill authoritative-netcode:
   // 20–30 Hz para proteger el presupuesto de CPU de los Workers).

@@ -149,13 +149,16 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/02-step-2-backend-domain.md`](docs/02-step-2-backend-domain.md) — dominio netcode-first (sim determinista + use-cases), garantías de determinismo y verificación.
 - [`docs/03-step-3-durable-objects-sockets.md`](docs/03-step-3-durable-objects-sockets.md) — DO + sockets + wire binario (bucle 30 Hz, KEYFRAME/DELTA) y el toolchain de tests de DO (Vitest 4 + pool-workers).
 - [`docs/04-step-4-client-3d.md`](docs/04-step-4-client-3d.md) — cliente 3D R3F + netcode cliente (predicción/reconciliación/interpolación, InstancedMesh, cuentagotas), Vite 7.
+- [`docs/05-step-5-gameplay-ux.md`](docs/05-step-5-gameplay-ux.md) — ciclo jugable + claridad (reinicio de ronda, cámara que sigue, HUD rol/timer) y fix de la sala "envenenada" (renacimiento + reconexión).
+- [`docs/06-roadmap.md`](docs/06-roadmap.md) — **roadmap maestro priorizado**: todo lo que falta para el clon completo (P0 núcleo jugable → P4 producción). Léelo para decidir qué desarrollar.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
-DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente (predicción/
-reconciliación/interpolación; movimiento compartido para paridad; tests fuera de React).
-**Los 4 pasos del prompt están completos.** Siguientes: verificación visual en navegador,
-pipeline `.glb` (Draco/Meshopt + gltfjsx), matchmaking UI, y cableado de monetización
-(ver `docs/04` §7).
-Al continuar en otra sesión: lee `docs/` y la skill relevante.
+DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
+ciclo jugable + claridad + robustez de salas.
+**Los 4 pasos del prompt + el paso de jugabilidad están completos**, pero el juego aún
+es un esqueleto: el núcleo de *Meccha Chameleon* (camuflaje que importa, detección,
+poses/sombras, salas, monetización) está pendiente. **El plan completo y priorizado vive
+en [`docs/06-roadmap.md`](docs/06-roadmap.md)** — siguiente recomendado: P0.1→P0.2→P0.3.
+Al continuar en otra sesión: lee `docs/06` (roadmap), el `docs/` del paso y la skill relevante.
 
 **Comandos de test:** `pnpm test` (node: shared/sim/backend) · `pnpm --filter @mecha/backend test:do` (DO en workerd) · `pnpm typecheck` · `pnpm lint`.

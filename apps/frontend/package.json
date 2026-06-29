@@ -8,7 +8,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "wrangler deploy",
+    "deploy": "vite build && wrangler deploy -c dist/server/wrangler.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cf-typegen": "wrangler types"
