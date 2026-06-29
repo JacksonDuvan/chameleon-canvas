@@ -5,12 +5,16 @@
  */
 import { Environment } from './Environment';
 import { Players } from './MechaMesh';
+import { CameraRig } from './CameraRig';
+import { LocalMarker } from './LocalMarker';
 
 export function Scene() {
   return (
     <>
+      <CameraRig />
       <Environment />
       <Players />
+      <LocalMarker />
     </>
   );
 }

@@ -32,3 +32,8 @@ export type StartGameError =
   | { kind: 'AlreadyStarted' }
   | { kind: 'NotEnoughPlayers'; have: number; need: number }
   | StorageError;
+
+export type RestartGameError =
+  | { kind: 'RoomNotFound'; roomId: string }
+  | { kind: 'NotHost'; playerId: string }
+  | StorageError;

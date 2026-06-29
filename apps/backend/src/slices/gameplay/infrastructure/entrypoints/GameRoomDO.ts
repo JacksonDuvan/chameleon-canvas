@@ -21,6 +21,7 @@ import { DoStorageRoomRepository } from '@/slices/gameplay/infrastructure/adapte
 import { SingleRoomRepository } from '@/slices/gameplay/infrastructure/adapters/SingleRoomRepository';
 import { PlayerJoin } from '@/slices/gameplay/use-cases/PlayerJoin';
 import { StartGame } from '@/slices/gameplay/use-cases/StartGame';
+import { RestartGame } from '@/slices/gameplay/use-cases/RestartGame';
 import { ChangeColor } from '@/slices/gameplay/use-cases/ChangeColor';
 import { KvMonetizationAdapter } from '@/slices/monetization/infrastructure/KvMonetizationAdapter';
 import {
@@ -59,6 +60,7 @@ export class GameRoomDO extends DurableObject<Env> {
   // Use-cases (cableados por constructor sobre la cache viva).
   private readonly playerJoin: PlayerJoin;
   private readonly startGame: StartGame;
+  private readonly restartGame: RestartGame;
   private readonly changeColor: ChangeColor;
 
   // Estado del bucle (volátil; se reconstruye tras un wake).
@@ -79,6 +81,7 @@ export class GameRoomDO extends DurableObject<Env> {
     const monet = new KvMonetizationAdapter(env.MONET_KV);
     this.playerJoin = new PlayerJoin(this.live, monet);
     this.startGame = new StartGame(this.live);
+    this.restartGame = new RestartGame(this.live);
     this.changeColor = new ChangeColor(this.live);
 
     // Heartbeat sin despertar la sala hibernada.
@@ -187,6 +190,10 @@ export class GameRoomDO extends DurableObject<Env> {
       const res = await this.startGame.execute({ roomId: room.id, playerId });
       if (res.ok) this.forceKeyframe = true;
       else ws.send(JSON.stringify({ type: 'error', cmd: 'start', kind: res.error.kind }));
+    } else if (msg.type === 'restart') {
+      const res = await this.restartGame.execute({ roomId: room.id, playerId });
+      if (res.ok) this.forceKeyframe = true;
+      else ws.send(JSON.stringify({ type: 'error', cmd: 'restart', kind: res.error.kind }));
     } else if (msg.type === 'color') {
       const res = await this.changeColor.execute({
         roomId: room.id,

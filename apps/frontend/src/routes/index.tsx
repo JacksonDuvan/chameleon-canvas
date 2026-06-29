@@ -43,7 +43,10 @@ function Game() {
         <Scene />
         <Cuentagotas sockets={sockets} />
       </Canvas>
-      <Hud onStart={() => sockets.sendControl({ type: 'start' })} />
+      <Hud
+        onStart={() => sockets.sendControl({ type: 'start' })}
+        onRestart={() => sockets.sendControl({ type: 'restart' })}
+      />
     </main>
   );
 }

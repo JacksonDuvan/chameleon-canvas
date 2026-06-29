@@ -13,6 +13,7 @@ describe('worldStore (Zustand vanilla)', () => {
       outcome: 'none',
       connected: false,
       isHost: false,
+      localRole: 'hider',
       lastError: null,
     });
   });

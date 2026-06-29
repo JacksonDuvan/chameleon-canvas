@@ -41,6 +41,18 @@ export interface GameSockets {
   sendControl: (msg: Record<string, unknown>) => void;
 }
 
+/** Traduce los `kind` de error del servidor a mensajes legibles para el HUD. */
+const ERROR_LABEL: Record<string, string> = {
+  NotHost: 'solo el host puede hacer eso',
+  NotEnoughPlayers: 'faltan jugadores (mín. 2) — abre otra pestaña para probar',
+  AlreadyStarted: 'la partida ya está en curso',
+  WrongPhase: 'solo puedes camuflarte en la fase de Preparación',
+  ColorLocked: 'espera un momento para volver a cambiar de color',
+  RoomNotFound: 'sala no encontrada',
+};
+
+let errorTimer: ReturnType<typeof setTimeout> | null = null;
+
 function handleControlMessage(raw: string): void {
   try {
     const msg = JSON.parse(raw) as {
@@ -58,8 +70,11 @@ function handleControlMessage(raw: string): void {
       // El servidor reasignó el host (el host anterior se desconectó).
       worldStore.setState({ isHost: msg.isHost === true });
     } else if (msg.type === 'error') {
-      // El servidor rechazó un control (p. ej. NotHost al pulsar Empezar sin ser host).
-      worldStore.setState({ lastError: `${msg.cmd ?? 'cmd'}: ${msg.kind ?? 'error'}` });
+      // El servidor rechazó un control (p. ej. NotHost / NotEnoughPlayers al pulsar
+      // Empezar). Mensaje legible + auto-limpieza para que no quede pegado.
+      worldStore.setState({ lastError: ERROR_LABEL[msg.kind ?? ''] ?? (msg.kind ?? 'error') });
+      if (errorTimer) clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => worldStore.setState({ lastError: null }), 4000);
     }
   } catch {
     /* mensaje malformado: ignorar */
@@ -109,7 +124,10 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   }
 
   st.serverTick = snap.tick; // RÁPIDO: mutación in situ
-  worldStore.setState({ phase: snap.phase, outcome: snap.outcome }); // LENTO: notifica al HUD
+  // LENTO: notifica al HUD. Los selectores reactivos hacen bail-out si el valor no
+  // cambió, así que publicar `localRole` cada tick es barato (solo re-renderiza al
+  // cambiar de rol, p. ej. cuando un Hider es atrapado y pasa a Seeker).
+  worldStore.setState({ phase: snap.phase, outcome: snap.outcome, localRole: st.local.role });
 }
 
 export function useGameSockets(roomId: string, name: string): GameSockets {

@@ -46,6 +46,7 @@ export interface WorldStoreState {
   outcome: GameOutcome;
   connected: boolean;
   isHost: boolean; // solo el host puede iniciar la ronda
+  localRole: PlayerRole; // rol del jugador local (para el HUD: Hider/Seeker)
   lastError: string | null; // último error de control del servidor (p. ej. NotHost)
 }
 
@@ -58,5 +59,6 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   outcome: 'none',
   connected: false,
   isHost: false,
+  localRole: 'hider',
   lastError: null,
 }));

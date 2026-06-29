@@ -56,6 +56,26 @@ export function startGame(world: WorldState, rng: Rng): void {
   world.phaseEndsAtTick = world.tick + world.config.prepDurationTicks;
 }
 
+/**
+ * Reinicia la ronda a Lobby para "jugar otra vez": limpia resultado/temporizador,
+ * devuelve a todos a Hider (sin congelar ni atrapar) y los re-posiciona en la rejilla
+ * de spawn. DETERMINISTA y sin RNG (los roles se reasignan en el próximo `startGame`).
+ */
+export function resetToLobby(world: WorldState): void {
+  world.phase = 'lobby';
+  world.phaseEndsAtTick = 0;
+  world.outcome = 'none';
+  let i = 0;
+  for (const p of world.players.values()) {
+    p.role = 'hider';
+    p.frozen = false;
+    p.caught = false;
+    p.colorLockedUntil = 0;
+    p.pos.setMut(((i % 5) - 2) * 2, 0, (Math.floor(i / 5) - 2) * 2);
+    i++;
+  }
+}
+
 /** ¿Sobrevive al menos un Hider sin atrapar? (condición de victoria de los Hiders). */
 export function anyHiderAlive(world: WorldState): boolean {
   for (const p of world.players.values()) {

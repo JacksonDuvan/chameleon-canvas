@@ -6,6 +6,7 @@ import {
   startGame,
   advancePhaseIfDue,
   anyHiderAlive,
+  resetToLobby,
 } from './phases';
 
 function worldWith(n: number) {
@@ -100,6 +101,35 @@ describe('advancePhaseIfDue', () => {
     startGame(w, makeRng(1));
     w.tick = w.phaseEndsAtTick - 1;
     advancePhaseIfDue(w);
+    expect(w.phase).toBe('prep');
+  });
+});
+
+describe('resetToLobby', () => {
+  it('desde Ended vuelve a Lobby y limpia roles/estado para volver a jugar', () => {
+    const w = worldWith(8);
+    startGame(w, makeRng(1));
+    w.tick = w.phaseEndsAtTick;
+    advancePhaseIfDue(w); // -> hunt
+    for (const p of w.players.values()) p.caught = true;
+    w.tick = w.phaseEndsAtTick;
+    advancePhaseIfDue(w); // -> ended
+    expect(w.phase).toBe('ended');
+
+    resetToLobby(w);
+
+    expect(w.phase).toBe('lobby');
+    expect(w.outcome).toBe('none');
+    expect(w.phaseEndsAtTick).toBe(0);
+    expect([...w.players.values()].every((p) => p.role === 'hider')).toBe(true);
+    expect([...w.players.values()].every((p) => !p.caught && !p.frozen)).toBe(true);
+  });
+
+  it('tras el reinicio se puede arrancar una nueva ronda (startGame funciona otra vez)', () => {
+    const w = worldWith(4);
+    startGame(w, makeRng(1));
+    resetToLobby(w);
+    startGame(w, makeRng(1)); // no-op si no estuviera en lobby
     expect(w.phase).toBe('prep');
   });
 });
