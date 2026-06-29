@@ -2,7 +2,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	// Worker autoritativo del juego (Hono + Durable Objects).
 	// Formato JSONC moderno (recomendado por Cloudflare; admite comentarios).
-	"name": "mecha-chameleon-backend",
+	"name": "chameleon-canvas-backend",
 	"main": "./src/index.ts",
 	// ⚠ VERIFICAR: usar una compatibility_date que la versión instalada de
 	// workerd/wrangler reconozca. Si wrangler la rechaza, retroceder a una fecha
