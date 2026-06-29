@@ -38,6 +38,29 @@ las mecánicas profundas del original (ver §"Pendiente").
 - Fantasmas (`ws-disconnect-test.mjs`): al cerrar el host, el otro cliente es promovido
   y el roster queda en 1 (sin fantasmas).
 
+## Fix crítico: sala "envenenada" (no se podía volver a entrar)
+
+Síntoma: ambas pestañas mostraban `○ desconectado` y "esperando a que el host
+inicie…" para siempre, recargara lo que recargara.
+
+Causa raíz: al irse el último jugador tras una ronda, la sala quedaba **persistida con
+0 jugadores y fase != lobby** (`dropConnection` quitaba al jugador pero no reseteaba la
+fase). El constructor del DO la rehidrataba así, y `PlayerJoin` rechazaba a TODO nuevo
+jugador con `AlreadyStarted` → el DO devolvía **HTTP 409** → el WebSocket nunca hacía
+upgrade → "desconectado" → nadie era host. El bucle no arrancaba, así que la
+reconciliación periódica tampoco corría: **sala muerta permanente**.
+
+Fix (verificado convirtiendo la `demo` real de 409 → 101):
+1. `ensureRoom` reconcilia SIEMPRE (también si la sala ya estaba en memoria), no solo al
+   cargarla de storage.
+2. `reconcileRoster` resetea a lobby **siempre** que `players.size === 0 && phase != lobby`,
+   sin depender de `changed` (antes solo reseteaba si había podado algo).
+3. Cliente: **reconexión automática con backoff** (0.5→4 s) en `useGameSockets`, para que
+   "desconectado" no quede pegado si el socket cae (server reiniciado, sala que renace).
+
+Regresión cubierta en `GameRoomDO.test.ts` ("una sala vacía en fase != lobby RENACE en
+lobby al reconectar").
+
 ## Pendiente (el "juego de verdad" del original Meccha Chameleon)
 Esto sigue siendo un esqueleto jugable. Falta la esencia del original:
 1. **Camuflaje real**: el cuentagotas absorbe color, pero no hay *feedback* de "cómo de

@@ -159,7 +159,15 @@ export class GameRoomDO extends DurableObject<Env> {
   // ── Internos ──
 
   private async ensureRoom(roomId: string): Promise<void> {
-    if (this.live.current()?.id === roomId) return;
+    // Ya cargada en memoria (p. ej. rehidratada por el constructor tras un wake): aun
+    // así reconcilia contra los sockets vivos ANTES de aceptar un nuevo jugador. Sin
+    // esto, una sala persistida en fase != lobby con jugadores fantasma rechazaría a
+    // TODO nuevo jugador con AlreadyStarted de forma PERMANENTE (sala envenenada que
+    // nunca vuelve al lobby; el loop no arranca y la reconciliación periódica no corre).
+    if (this.live.current()?.id === roomId) {
+      this.reconcileRoster();
+      return;
+    }
     const loaded = await this.persist.load(roomId);
     if (loaded.ok && loaded.value) {
       this.live.set(loaded.value);
@@ -255,11 +263,16 @@ export class GameRoomDO extends DurableObject<Env> {
       if (room.hostId) this.notifyHost(room.hostId);
       changed = true;
     }
-    if (changed && room.world.players.size === 0) {
+    // Sala sin NADIE conectado pero en fase != lobby → devuélvela a lobby para que pueda
+    // renacer. NO depende de `changed`: una sala persistida con 0 jugadores y fase
+    // 'ended'/'prep' (el último jugador se fue sin que se reseteara la fase) quedaría
+    // ENVENENADA — rechazaría todo `PlayerJoin` con AlreadyStarted de forma permanente.
+    if (room.world.players.size === 0 && room.world.phase !== 'lobby') {
       room.world.phase = 'lobby';
       room.world.phaseEndsAtTick = 0;
       room.world.outcome = 'none';
       room.hostId = null;
+      changed = true;
     }
     return changed;
   }

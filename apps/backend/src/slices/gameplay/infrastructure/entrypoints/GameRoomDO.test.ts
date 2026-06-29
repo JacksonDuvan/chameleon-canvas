@@ -81,4 +81,40 @@ describe('GameRoomDO (integración, workerd)', () => {
     });
     res.webSocket!.close();
   });
+
+  it('una sala vacía en fase != lobby RENACE en lobby al reconectar (no queda envenenada)', async () => {
+    // Regresión: al irse el último jugador tras una ronda, la sala quedaba persistida
+    // con 0 jugadores y fase 'ended'/'prep'. PlayerJoin rechazaba a TODO nuevo jugador
+    // con AlreadyStarted (409) de forma permanente → "no vuelve a iniciar".
+    const stub = stubFor('r-reborn');
+    const first = await connect(stub, 'r-reborn', 'Uno');
+    first.webSocket!.accept();
+
+    type PoisonRoom = {
+      world: { players: Map<string, unknown>; phase: string; outcome: string };
+      roster: Map<string, unknown>;
+      hostId: string | null;
+    };
+    const current = (instance: unknown): PoisonRoom | null =>
+      (instance as { live: { current(): PoisonRoom | null } }).live.current();
+
+    await runInDurableObject(stub, async (instance) => {
+      const room = current(instance);
+      if (!room) throw new Error('sala no cargada');
+      room.world.players.clear();
+      room.roster.clear();
+      room.hostId = null;
+      room.world.phase = 'ended';
+      room.world.outcome = 'seekers';
+    });
+    first.webSocket!.close();
+
+    const res = await connect(stub, 'r-reborn', 'Dos');
+    expect(res.status).toBe(101); // antes: 409 AlreadyStarted permanente
+    res.webSocket!.accept();
+    await runInDurableObject(stub, async (instance) => {
+      expect(current(instance)?.world.phase).toBe('lobby'); // renació
+    });
+    res.webSocket!.close();
+  });
 });

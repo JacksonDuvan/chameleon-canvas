@@ -136,22 +136,53 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
   const seqRef = useRef(0);
 
   useEffect(() => {
-    const ws = new WebSocket(
-      `${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}`,
-    );
-    ws.binaryType = 'arraybuffer';
-    wsRef.current = ws;
-    pendingRef.current.length = 0;
+    let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
 
-    ws.onopen = () => worldStore.setState({ connected: true });
-    ws.onclose = () => worldStore.setState({ connected: false });
-    ws.onmessage = (ev: MessageEvent) => {
-      if (typeof ev.data === 'string') handleControlMessage(ev.data);
-      else applySnapshot(decodeSnapshot(ev.data as ArrayBuffer), pendingRef.current);
+    const connect = (): void => {
+      if (disposed) return;
+      const ws = new WebSocket(`${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}`);
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+      pendingRef.current.length = 0;
+
+      ws.onopen = () => {
+        attempts = 0;
+        worldStore.setState({ connected: true });
+      };
+      ws.onmessage = (ev: MessageEvent) => {
+        if (typeof ev.data === 'string') handleControlMessage(ev.data);
+        else applySnapshot(decodeSnapshot(ev.data as ArrayBuffer), pendingRef.current);
+      };
+      // RECONEXIÓN con backoff (0.5→4 s): si el socket cae (server reiniciado, sala que
+      // renace, red), reintenta solo en vez de quedar "desconectado" para siempre.
+      ws.onclose = () => {
+        worldStore.setState({ connected: false });
+        if (disposed) return;
+        const delay = Math.min(4000, 500 * 2 ** attempts);
+        attempts++;
+        retryTimer = setTimeout(connect, delay);
+      };
+      ws.onerror = () => {
+        try {
+          ws.close();
+        } catch {
+          /* ya cerrado: onclose programará el reintento */
+        }
+      };
     };
 
+    connect();
+
     return () => {
-      ws.close();
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      const ws = wsRef.current;
+      if (ws) {
+        ws.onclose = null; // no reprogramar reintentos al desmontar
+        ws.close();
+      }
       wsRef.current = null;
     };
   }, [roomId, name]);
