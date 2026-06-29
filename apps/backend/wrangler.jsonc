@@ -1,63 +1,62 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  // Worker autoritativo del juego (Hono + Durable Objects).
-  // Formato JSONC moderno (recomendado por Cloudflare; admite comentarios).
-  "name": "mecha-chameleon-backend",
-  "main": "./src/index.ts",
-
-  // ⚠ VERIFICAR: usar una compatibility_date que la versión instalada de
-  // workerd/wrangler reconozca. Si wrangler la rechaza, retroceder a una fecha
-  // estable anterior. Misma fecha en backend y frontend para paridad de runtime.
-  "compatibility_date": "2026-06-01",
-  // nodejs_compat: defensivo (algunas libs/crypto lo usan). Rapier (WASM) NO lo
-  // requiere. Se mantiene para paridad con el worker del frontend (TanStack).
-  "compatibility_flags": ["nodejs_compat"],
-
-  // ── Durable Objects: una instancia = una sala de juego (estado autoritativo) ──
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "GAME_ROOM",
-        "class_name": "GameRoomDO"
-        // sin script_name: el DO vive en ESTE mismo Worker.
-      }
-    ]
-  },
-  // Almacenamiento SQLite (estándar para DO nuevos): SQL + 1GB/DO + PITR.
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["GameRoomDO"]
-    }
-  ],
-
-  // ── Monetización (puertos ya previstos en el dominio) ──
-  // KV: entitlements / suscripción "Premium Club" / flags.
-  "kv_namespaces": [
-    {
-      "binding": "MONET_KV",
-      "id": "<RELLENAR: wrangler kv namespace create MONET_KV>"
-    }
-  ],
-  // R2: texturas/cosméticos premium custom. POSPUESTO (P3 — aún no se usa en runtime).
-  // R2 exige activarlo en el dashboard; lo dejamos comentado para no bloquear el primer
-  // deploy. Para reactivar: crea el bucket (`wrangler r2 bucket create mecha-cosmetics`)
-  // y descomenta este bloque.
-  // "r2_buckets": [
-  //   {
-  //     "binding": "COSMETICS_R2",
-  //     "bucket_name": "mecha-cosmetics"
-  //   }
-  // ],
-
-  // Variables de juego. El tick autoritativo es 30 Hz (skill authoritative-netcode:
-  // 20–30 Hz para proteger el presupuesto de CPU de los Workers).
-  "vars": {
-    "TICK_HZ": "30",
-    "MAX_PLAYERS_PER_ROOM": "12"
-  },
-
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// Worker autoritativo del juego (Hono + Durable Objects).
+	// Formato JSONC moderno (recomendado por Cloudflare; admite comentarios).
+	"name": "mecha-chameleon-backend",
+	"main": "./src/index.ts",
+	// ⚠ VERIFICAR: usar una compatibility_date que la versión instalada de
+	// workerd/wrangler reconozca. Si wrangler la rechaza, retroceder a una fecha
+	// estable anterior. Misma fecha en backend y frontend para paridad de runtime.
+	"compatibility_date": "2026-06-01",
+	// nodejs_compat: defensivo (algunas libs/crypto lo usan). Rapier (WASM) NO lo
+	// requiere. Se mantiene para paridad con el worker del frontend (TanStack).
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// ── Durable Objects: una instancia = una sala de juego (estado autoritativo) ──
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "GAME_ROOM",
+				"class_name": "GameRoomDO"
+				// sin script_name: el DO vive en ESTE mismo Worker.
+			}
+		]
+	},
+	// Almacenamiento SQLite (estándar para DO nuevos): SQL + 1GB/DO + PITR.
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"GameRoomDO"
+			]
+		}
+	],
+	// ── Monetización (puertos ya previstos en el dominio) ──
+	// KV: entitlements / suscripción "Premium Club" / flags.
+	"kv_namespaces": [
+		{
+			"binding": "MONET_KV",
+			"id": "1dde6b7d9be64427b8952c81ed2893b4"
+		}
+	],
+	// R2: texturas/cosméticos premium custom. POSPUESTO (P3 — aún no se usa en runtime).
+	// R2 exige activarlo en el dashboard; lo dejamos comentado para no bloquear el primer
+	// deploy. Para reactivar: crea el bucket (`wrangler r2 bucket create mecha-cosmetics`)
+	// y descomenta este bloque.
+	// "r2_buckets": [
+	//   {
+	//     "binding": "COSMETICS_R2",
+	//     "bucket_name": "mecha-cosmetics"
+	//   }
+	// ],
+	// Variables de juego. El tick autoritativo es 30 Hz (skill authoritative-netcode:
+	// 20–30 Hz para proteger el presupuesto de CPU de los Workers).
+	"vars": {
+		"TICK_HZ": "30",
+		"MAX_PLAYERS_PER_ROOM": "12"
+	},
+	"observability": {
+		"enabled": true
+	}
 }

@@ -20,9 +20,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "backend:dev": "pnpm --filter @mecha/backend dev",
-    "backend:deploy": "pnpm --filter @mecha/backend deploy",
+    "backend:deploy": "pnpm --filter @mecha/backend run deploy",
     "frontend:dev": "pnpm --filter @mecha/frontend dev",
-    "frontend:deploy": "pnpm --filter @mecha/frontend deploy",
+    "frontend:deploy": "pnpm --filter @mecha/frontend run deploy",
     "cf-typegen": "pnpm --filter @mecha/backend cf-typegen"
   },
   "devDependencies": {
