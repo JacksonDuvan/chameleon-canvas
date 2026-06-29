@@ -1,29 +1,41 @@
 /**
- * Room — AGREGADO de sesión del backend (server-authoritative). Modela lo que el
- * cliente NO predice: fase de ronda (Lobby→Prep→Hunt), roster, temporizadores,
- * regla de silbidos, condición de victoria.
+ * Room — AGREGADO de sesión del backend (server-authoritative). Envuelve el
+ * `WorldState` compartido de `@mecha/sim` (lo que el cliente predice) y añade lo
+ * server-only: identidad, host, config de sala y metadatos de jugador (`roster`).
  *
- * Distinto de `WorldState` de `@mecha/sim` (estado de movimiento/física compartido
- * y predicho). Ver packages/sim/README.md para la separación "sim compartida" vs
- * "reglas server-only". Skill `hexagonal-vertical-slicing`.
- *
- * SCAFFOLD del Paso 1 — invariantes y transiciones de fase en el Paso 2.
+ * La fase, los temporizadores, las posiciones y los roles viven en `world` porque
+ * el cliente los necesita para predecir. La separación está documentada en
+ * packages/sim/README.md. Skill `hexagonal-vertical-slicing`.
  */
-import type { GamePhase } from '@shared/protocol';
-import type { Player } from './Player';
+import { WorldState, initialWorld } from '@mecha/sim';
+import type { SimConfig } from '@mecha/sim';
+import { Player } from './Player';
+
+export interface RoomConfig {
+  readonly maxPlayers: number;
+  readonly whistling: boolean; // regla opcional de silbidos (pista sonora)
+}
+
+export const DEFAULT_ROOM_CONFIG: RoomConfig = { maxPlayers: 12, whistling: false };
 
 export class Room {
   readonly id: string;
-  phase: GamePhase = 'lobby';
-  whistling = false; // regla opcional del host (pista sonora a los Seekers)
-  prepEndsAtTick = 0;
-  huntEndsAtTick = 0;
-  readonly players = new Map<string, Player>();
+  hostId: string | null;
+  readonly config: RoomConfig;
+  readonly world: WorldState;
+  /** Metadatos por jugador que NO son parte de la simulación predicha. */
+  readonly roster: Map<string, Player>;
 
-  constructor(id: string) {
+  constructor(
+    id: string,
+    config: RoomConfig = DEFAULT_ROOM_CONFIG,
+    seed = 1,
+    simConfig?: SimConfig,
+  ) {
     this.id = id;
+    this.hostId = null;
+    this.config = config;
+    this.world = simConfig ? new WorldState(seed, simConfig) : initialWorld(seed);
+    this.roster = new Map();
   }
-
-  // TODO(Paso 2): startPrep(), startHunt(), onSeekerCatch(hiderId) -> convierte a
-  // Seeker, checkWinCondition() -> Hiders ganan si sobrevive >=1 al acabar el tiempo.
 }

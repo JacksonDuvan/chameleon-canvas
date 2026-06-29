@@ -1,19 +1,19 @@
 /**
- * Player — agregado de jugador del lado backend (rol, estado de sesión, marcador).
- * Complementa al `PlayerState` cinemático de `@mecha/sim` (posición/color predichos).
- *
- * SCAFFOLD del Paso 1 — Paso 2.
+ * Player — metadatos de SESIÓN del jugador en el backend (server-only): nombre,
+ * si es host, y entitlement de monetización resuelto al unirse. Complementa al
+ * `PlayerState` cinemático de `@mecha/sim` (posición/rol/color que se predicen).
  */
-import type { PlayerRole } from '@shared/protocol';
-
 export class Player {
   readonly id: string;
-  role: PlayerRole = 'hider';
-  caught = false; // un Hider atrapado pasa a Seeker (role) y queda marcado
-  colorLockedUntil = 0; // tick; bloqueo tras absorber color (anti-spam)
+  displayName: string;
+  isHost: boolean;
+  /** Premium Club: salta anuncios (resuelto por IMonetizationService al unirse). */
+  premium: boolean;
 
-  constructor(id: string, role: PlayerRole = 'hider') {
+  constructor(id: string, displayName: string, isHost = false, premium = false) {
     this.id = id;
-    this.role = role;
+    this.displayName = displayName;
+    this.isHost = isHost;
+    this.premium = premium;
   }
 }

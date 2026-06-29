@@ -37,6 +37,21 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
+  // Convención del repo: el prefijo `_` marca params/vars intencionalmente sin usar
+  // (alinea con noUnusedLocals/noUnusedParameters de tsc, que ya ignoran `_`).
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+
   // ── Clasificación de elementos arquitectónicos ──
   {
     plugins: { boundaries },

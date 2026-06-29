@@ -3,4 +3,5 @@
  * por alias a un directorio busca su index). Skill `authoritative-netcode`.
  */
 export * from './messages';
+export * from './commands';
 export * from './wire';

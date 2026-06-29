@@ -33,6 +33,7 @@ export const GamePhase = {
   LOBBY: 'lobby',
   PREP: 'prep',
   HUNT: 'hunt',
+  ENDED: 'ended',
 } as const;
 export type GamePhase = (typeof GamePhase)[keyof typeof GamePhase];
 

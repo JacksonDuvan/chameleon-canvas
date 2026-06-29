@@ -3,4 +3,5 @@
  * Ver README.md de este paquete para la decisión arquitectónica.
  */
 export * from './core/index';
-export type { IPhysicsWorld } from './physics/IPhysicsWorld';
+export type { IPhysicsWorld, RaycastHit } from './physics/IPhysicsWorld';
+export { KinematicPhysicsWorld } from './physics/KinematicPhysicsWorld';

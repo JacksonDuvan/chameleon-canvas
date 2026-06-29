@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "vite-tsconfig-paths": "catalog:"
   }
 }

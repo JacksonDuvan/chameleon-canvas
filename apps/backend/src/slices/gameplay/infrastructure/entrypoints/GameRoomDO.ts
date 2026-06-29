@@ -17,12 +17,13 @@ import type { Env } from '@/shared/env';
 import { ProcessTick } from '@/slices/gameplay/use-cases/ProcessTick';
 import { DoStorageRoomRepository } from '@/slices/gameplay/infrastructure/adapters/DoStorageRoomRepository';
 import type { IRoomRepository } from '@/slices/gameplay/domain/ports/IRoomRepository';
-import { initRapier } from '@sim/physics/wasm/rapier-init';
+import { KinematicPhysicsWorld, type IPhysicsWorld } from '@mecha/sim';
 
 const TICK_MS = 1000 / 30; // 30 Hz autoritativo
 
 export class GameRoomDO extends DurableObject<Env> {
   private readonly rooms: IRoomRepository;
+  private readonly physics: IPhysicsWorld;
   private readonly processTick: ProcessTick;
   private loop: ReturnType<typeof setInterval> | null = null;
 
@@ -30,13 +31,12 @@ export class GameRoomDO extends DurableObject<Env> {
     super(ctx, env);
     // ── Composition root: construir adaptadores (driven) e inyectarlos ──
     this.rooms = new DoStorageRoomRepository(ctx.storage);
-    this.processTick = new ProcessTick(this.rooms);
-
-    // Rapier se inicializa una vez por isolate (idempotente; barato tras wake).
-    ctx.blockConcurrencyWhile(async () => {
-      await initRapier();
-      // TODO(Paso 3): rehidratar estado durable (marcador, jugadores) del storage.
-    });
+    // Físicas ligeras para el MVP (puro TS, determinista, sin WASM). Cuando haga
+    // falta colisión rica contra geometría compleja se sustituye por
+    // RapierPhysicsWorld (initRapier en blockConcurrencyWhile) — mismo puerto.
+    const capacity = Number(env.MAX_PLAYERS_PER_ROOM) || 16;
+    this.physics = new KinematicPhysicsWorld(capacity);
+    this.processTick = new ProcessTick(this.rooms, this.physics);
 
     // Heartbeat sin despertar la sala hibernada.
     // ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));

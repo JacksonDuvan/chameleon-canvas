@@ -145,9 +145,11 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 `docs/` mantiene el contexto entre sesiones (este monorepo se desarrolla por pasos):
 
 - [`docs/00-initial-prompt.md`](docs/00-initial-prompt.md) — prompt fundacional (alcance + reglas).
-- [`docs/01-step-1-monorepo-setup.md`](docs/01-step-1-monorepo-setup.md) — qué se construyó en el Paso 1 (este scaffolding), decisiones y árbol.
+- [`docs/01-step-1-monorepo-setup.md`](docs/01-step-1-monorepo-setup.md) — qué se construyó en el Paso 1 (scaffolding), decisiones y árbol.
+- [`docs/02-step-2-backend-domain.md`](docs/02-step-2-backend-domain.md) — dominio netcode-first (sim determinista + use-cases), garantías de determinismo y verificación.
 
-**Plan por pasos:** Paso 1 ✅ scaffolding (hecho) · Paso 2 ⏳ dominio del backend
-(netcode primero, MVP en coordenadas) · Paso 3 ⏳ DO + sockets Hono (bucle 30 Hz) ·
+**Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend
+(netcode-first: kernel `@mecha/sim` determinista + use-cases con Result/DI; tests TDD) ·
+Paso 3 ⏳ DO + sockets Hono (bucle 30 Hz, wire binario, broadcast de snapshots) ·
 Paso 4 ⏳ experiencia 3D (raycast color, predicción/interpolación, pipeline .glb).
 Al continuar en otra sesión: lee `docs/` y la skill relevante, y respeta el plan.

@@ -1,30 +1,27 @@
 /**
  * Fake en memoria de `IRoomRepository` (NO un mock). Implementa el MISMO puerto
- * que producción (LSP): si la firma cambia, este fake deja de compilar.
- * Skills `tdd-testing` + `hexagonal-vertical-slicing`.
- *
- * SCAFFOLD del Paso 1.
+ * que producción (LSP). Skills `tdd-testing` + `hexagonal-vertical-slicing`.
  */
 import { Ok, type Result } from '@shared/result';
 import type {
   IRoomRepository,
   RoomRepoError,
 } from '@/slices/gameplay/domain/ports/IRoomRepository';
-import type { WorldState } from '@sim/core/entities/WorldState';
+import type { Room } from '@/slices/gameplay/domain/entities/Room';
 
 export class InMemoryRoomRepository implements IRoomRepository {
-  private readonly rooms = new Map<string, WorldState>();
+  private readonly rooms = new Map<string, Room>();
 
-  seed(roomId: string, world: WorldState): void {
-    this.rooms.set(roomId, world);
+  seed(room: Room): void {
+    this.rooms.set(room.id, room);
   }
 
-  async load(roomId: string): Promise<Result<WorldState | null, RoomRepoError>> {
+  async load(roomId: string): Promise<Result<Room | null, RoomRepoError>> {
     return Ok(this.rooms.get(roomId) ?? null);
   }
 
-  async save(roomId: string, world: WorldState): Promise<Result<void, RoomRepoError>> {
-    this.rooms.set(roomId, world);
+  async save(room: Room): Promise<Result<void, RoomRepoError>> {
+    this.rooms.set(room.id, room);
     return Ok(undefined);
   }
 }
