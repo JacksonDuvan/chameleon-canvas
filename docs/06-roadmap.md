@@ -12,6 +12,23 @@
 
 ---
 
+## 0. 🎯 Objetivo de lanzamiento: **V1** → ver [`docs/09-v1-scope.md`](09-v1-scope.md)
+
+Este roadmap es el **backlog completo**. El **corte que se lanza** (clon *lite* web,
+**jugable, divertido, funcional**, lo más cercano al original, **gráficos estilizados
+secundarios pero con esconderse REAL**) está definido en [`docs/09`](09-v1-scope.md).
+**Regla innegociable de V1:** debe haber forma real de **esconderse sin ser detectado**
+(hoy no la hay: el escenario es plano/abierto y el avatar es una cápsula erguida).
+
+**Corte V1 (must-have):** escenario "escondible" con props/cobertura · poses+rotación ·
+Seeker en 1ª persona con mouse-look · camuflaje+fijación (✅) · matchmaking por código ·
+results con reveal · pass visual low-poly estilizado (tipo ejemplos de threejs.org, con
+assets CC0 gratis, **sin Blender**) · audio mínimo · deploy al edge.
+**Post-V1:** gráficos AAA / modelo riggeado (P4.1), monetización (P3), móvil/táctil,
+match de sombras, lag compensation. Detalle y "definición de done" en `docs/09`.
+
+---
+
 ## 1. Dónde estamos (cimientos ✅)
 
 Sólido y verificado con tests:
@@ -31,15 +48,15 @@ Sólido y verificado con tests:
 | Regla original (prompt §"Reglas de negocio") | Estado | Qué falta |
 |---|---|---|
 | Flujo 3 fases Lobby→Prep→Hunt (+Ended) | ✅ | — |
-| Camuflaje: cuentagotas 'E' absorbe color del entorno y pinta el avatar | 🟡 parcial | textura/patrón (no solo color plano); **feedback de calidad** de camuflaje |
-| **Detección por camuflaje** (el Seeker no ve al que se funde bien) | ❌ | toda la mecánica — es el corazón del juego |
+| Camuflaje: cuentagotas 'E' absorbe color del entorno y pinta el avatar | ✅ (P0.2) | **score de camuflaje + barra HUD hechos**; falta textura/patrón (no solo color plano) |
+| **Detección por camuflaje** (el Seeker no ve al que se funde bien) | ✅ (P0.3) | resuelto vía **fijación híbrida** (el camuflaje alarga el tiempo de mira necesario). Ver `docs/07` |
 | Poses + rotación del avatar para encajar en esquinas | ❌ | solo existe "congelar" (FREEZE); faltan poses múltiples y rotación |
 | Match de sombras (la sombra delata) | ❌ | lógica de sombra como factor de detección |
 | Whistling (pista sonora periódica, opción del host) | ❌ | flag `whistling` existe en config; sin implementación ni audio |
 | Hider atrapado → Seeker | ✅ lógica | falta **feedback visual** de captura y balance |
 | Hiders ganan si sobrevive ≥1 | ✅ | — |
-| Captura por interacción del Seeker ('F') | 🟡 parcial | raycast funciona pero **ignora el camuflaje** y no tiene feedback |
-| Escenario con materiales/colores/texturas llamativas (ladrillo, madera) | 🟡 parcial | hoy: plano + cajas de color; faltan texturas/props ricos |
+| Captura por interacción del Seeker ('F') | ✅ (P0.3) | ahora **consulta el camuflaje** (fijación por tiempo, F mantenido) + feedback `beingWatched`/captura |
+| Escenario con materiales/colores/texturas llamativas (ladrillo, madera) | ✅ (P0.1) | **mapa compartido** `@mecha/sim/core/map` (≥4 superficies, `referenceColorAt`); faltan texturas/props ricos y `.glb` (P4.1) |
 | Durable Objects (coordinación WS stateful) | ✅ | — |
 | Monetización: puertos + mocks (ads, tienda R2, Premium) | 🟡 parcial | puerto+entitlement listos; falta **todo el frontend** y SDKs |
 | Hono RPC `AppType` end-to-end | 🟡 parcial | tiempo real va por WS; RPC HTTP de control sin cablear al cliente |
@@ -56,7 +73,7 @@ Sólido y verificado con tests:
 > (el camuflaje no significa nada sin un escenario donde fundirse, ni sin que el Seeker
 > reaccione a él) y conviene hacerlas en este orden.
 
-### P0.1 · Escenario con materiales variados — **M**
+### P0.1 · Escenario con materiales variados — **M** — ✅ HECHO (ver `docs/08`)
 - **Objetivo:** un mapa pequeño pero con superficies de colores/patrones distintos
   (paredes, suelo por zonas, props como cajas/barriles) donde tenga sentido camuflarse.
 - **Alcance:** ampliar `features/canvas-3d/components/Environment.tsx` con varias
@@ -68,7 +85,7 @@ Sólido y verificado con tests:
   servidor conoce el color de referencia de cada punto del mapa.
 - **Skills:** `r3f-rendering`, `hexagonal-vertical-slicing`, `workers-memory-optimization`.
 
-### P0.2 · Camuflaje que importa + feedback — **M**
+### P0.2 · Camuflaje que importa + feedback — **M** — ✅ HECHO (ver `docs/08`)
 - **Objetivo:** el cuentagotas pinta tu avatar **y** existe una medida de "qué tan
   camuflado estás" respecto al entorno cercano.
 - **Alcance:** value-object/cálculo determinista de **diferencia de color** (avatar vs.
@@ -80,7 +97,11 @@ Sólido y verificado con tests:
 - **Skills:** `authoritative-netcode`, `tdd-testing` (test del cálculo de camuflaje),
   `r3f-rendering`.
 
-### P0.3 · Detección del Seeker basada en camuflaje + feedback de captura — **M**
+### P0.3 · Detección del Seeker basada en camuflaje + feedback de captura — **M** — ✅ HECHO (ver `docs/08`)
+> **Desviación consciente:** en vez de un umbral de inmunidad dura, se implementó el
+> modelo **híbrido por tiempo de fijación** (el `camoScore` alarga los ticks de mira
+> sostenida que el Seeker necesita para taggear). Justificación y contraste con la biblia
+> en [`docs/07`](07-librerias-cliente-3d.md).
 - **Objetivo:** el Seeker **solo puede atrapar** a Hiders "visibles" (mal camuflados o
   en movimiento); el bien camuflado y quieto es prácticamente inmune.
 - **Alcance:** en `step.ts`, el raycast de captura comprueba el **score de camuflaje**
@@ -208,5 +229,9 @@ Sólido y verificado con tests:
 4. **Camino caliente sin asignaciones**; estado rápido fuera de React.
 5. Cada épica termina con `pnpm test` + `test:do` + `typecheck` + `lint` en verde y un commit.
 
-> **Siguiente recomendado:** **P0.1 → P0.2 → P0.3** (núcleo jugable). Es lo que convierte
-> la demo en el juego, y reutiliza casi todo lo existente.
+> **P0 núcleo jugable: ✅ COMPLETO** (P0.1 escenario compartido · P0.2 camuflaje+barra ·
+> P0.3 detección por fijación híbrida). Ver [`docs/08`](08-step-6-camouflage-core.md).
+> **Siguiente = el "núcleo de esconderse" de V1** (ver [`docs/09`](09-v1-scope.md)):
+> **V1-A escenario escondible (props/cobertura) + V1-B poses/rotación + V1-C Seeker en 1ª
+> persona con mouse-look** — están acoplados y son lo que convierte el camuflaje (ya hecho)
+> en esconderse de verdad. Luego results/reveal, matchmaking, pass visual, audio y deploy.

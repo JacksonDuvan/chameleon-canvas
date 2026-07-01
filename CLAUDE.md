@@ -26,11 +26,14 @@ en [`docs/00-initial-prompt.md`](docs/00-initial-prompt.md).
 
 ## 2. Skills (LÉELAS — son la autoridad arquitectónica)
 
-Las 5 skills viven en `.claude/skills/`. **Cada una se aplica ANTES de escribir el
-código que gobierna**, no después. Resumen e índice:
+Las 6 skills viven en `.claude/skills/`. **Cada una se aplica ANTES de escribir el
+código que gobierna**, no después. La primera, `mecha-chameleon-gamedesign`, define
+**QUÉ** construir (la biblia de mecánicas y UX/UI); las otras cinco definen **CÓMO**
+construirlo (arquitectura, netcode, render, memoria, tests). Resumen e índice:
 
 | Skill | Cuándo aplica | Impone |
 |---|---|---|
+| [`mecha-chameleon-gamedesign`](.claude/skills/mecha-chameleon-gamedesign/SKILL.md) | **Biblia de gameplay/UX-UI.** Implementar/ajustar/revisar cualquier feature de juego: fases (lobby/prep/hunt/results), pintura (Meccha Paint/Spoid/paleta/metallic-roughness), poses, mecánica del Seeker (arma, disparos limitados, tagging, impacto), movimiento, modos (Normal/Infección/Double), mapas, HUD y pantallas, cámara, monetización cosmética; decidir autoritativo vs predicho | **QUÉ** construir para ser fiel al original: reglas del bucle de partida, sistema de pintura y poses, resolución de caza, modos de juego, contratos de las pantallas/HUD. El **CÓMO** se apoya en las otras 5 skills. Aplícala ANTES de diseñar o codificar cualquier feature |
 | [`hexagonal-vertical-slicing`](.claude/skills/hexagonal-vertical-slicing/SKILL.md) | Decidir dónde va un archivo; crear package/slice/feature; conectar transporte con lógica; revisar capas | Dominio puro y determinista; puertos y adaptadores; slices verticales; **patrón Result**; SOLID; **DI por constructor**. Ref: [`result-pattern.md`](.claude/skills/hexagonal-vertical-slicing/references/result-pattern.md) |
 | [`authoritative-netcode`](.claude/skills/authoritative-netcode/SKILL.md) | Cualquier sincronización multijugador, ticks, snapshots, input, movimiento, impactos, forma de los mensajes WS | Servidor autoritativo; **tick fijo 30 Hz**; predicción + **reconciliación** (sin snap); interpolación de remotos; lag compensation; binario compacto; **WebSocket Hibernation API**. Ref: [`wire-format.md`](.claude/skills/authoritative-netcode/references/wire-format.md) |
 | [`r3f-rendering`](.claude/skills/r3f-rendering/SKILL.md) | Escenas 3D, `useFrame`, meshes, materiales, cámara, animación por frame, Zustand que alimenta la escena | **Nunca setState por frame**; mutar refs en `useFrame`; mover con `delta`; no asignar en el bucle; memoizar/compartir geometrías/materiales; **InstancedMesh**; leer estado rápido de Zustand de forma transitoria |
@@ -151,14 +154,23 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/04-step-4-client-3d.md`](docs/04-step-4-client-3d.md) — cliente 3D R3F + netcode cliente (predicción/reconciliación/interpolación, InstancedMesh, cuentagotas), Vite 7.
 - [`docs/05-step-5-gameplay-ux.md`](docs/05-step-5-gameplay-ux.md) — ciclo jugable + claridad (reinicio de ronda, cámara que sigue, HUD rol/timer) y fix de la sala "envenenada" (renacimiento + reconexión).
 - [`docs/06-roadmap.md`](docs/06-roadmap.md) — **roadmap maestro priorizado**: todo lo que falta para el clon completo (P0 núcleo jugable → P4 producción). Léelo para decidir qué desarrollar.
+- [`docs/07-librerias-cliente-3d.md`](docs/07-librerias-cliente-3d.md) — **referencia**: librerías del cliente 3D (drei ✅ ya instalada; por qué **NO** `@react-three/rapier`/`cannon`) y el patrón Spoid/camuflaje por raycast (presentación en el cliente vs. autoridad del servidor). Incluye la **decisión** del camuflaje híbrido por fijación.
+- [`docs/08-step-6-camouflage-core.md`](docs/08-step-6-camouflage-core.md) — **núcleo jugable P0**: escenario compartido (`@mecha/sim/core/map`), score de camuflaje determinista + barra HUD, y detección del Seeker por **fijación** (wire v2). Cierra P0.1→P0.3.
+- [`docs/09-v1-scope.md`](docs/09-v1-scope.md) — **🎯 CHARTER DE V1 (objetivo de lanzamiento)**: qué se lanza (clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**, pero **esconderse REAL innegociable**). Es el filtro de "¿en qué trabajo?". Léelo antes de elegir tarea.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
-ciclo jugable + claridad + robustez de salas.
-**Los 4 pasos del prompt + el paso de jugabilidad están completos**, pero el juego aún
-es un esqueleto: el núcleo de *Meccha Chameleon* (camuflaje que importa, detección,
-poses/sombras, salas, monetización) está pendiente. **El plan completo y priorizado vive
-en [`docs/06-roadmap.md`](docs/06-roadmap.md)** — siguiente recomendado: P0.1→P0.2→P0.3.
-Al continuar en otra sesión: lee `docs/06` (roadmap), el `docs/` del paso y la skill relevante.
+ciclo jugable + claridad + robustez de salas · **Paso 6 ✅ núcleo jugable de camuflaje
+(P0.1→P0.3: escenario compartido, `camoScore`, detección por fijación) — ver `docs/08`**.
+**El núcleo P0 de *Meccha Chameleon* (camuflaje que importa + detección) ya está**, PERO
+aún no se puede *esconder de verdad* (escenario plano/abierto, avatar cápsula). **El
+objetivo es lanzar una V1**: clon *lite* web jugable/divertido/fiel, gráficos low-poly
+estilizados **secundarios**, con **esconderse REAL innegociable**. El corte y la
+"definición de done" de V1 están en **[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (el
+backlog completo, en [`docs/06`](docs/06-roadmap.md)).
+**Siguiente = núcleo de esconderse de V1:** escenario escondible (props/cobertura) +
+poses/rotación + **Seeker en 1ª persona con mouse-look** (acoplados). Luego results/reveal,
+matchmaking por código, pass visual, audio y deploy al edge. Al continuar en otra sesión:
+lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la skill relevante.
 
 **Comandos de test:** `pnpm test` (node: shared/sim/backend) · `pnpm --filter @mecha/backend test:do` (DO en workerd) · `pnpm typecheck` · `pnpm lint`.
