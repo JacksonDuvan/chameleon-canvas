@@ -22,6 +22,12 @@ export class PlayerState {
   caught: boolean; // un Hider atrapado pasa a Seeker y queda marcado
   colorLockedUntil: number; // tick hasta el que no puede recambiar color
   lastProcessedInput: number; // seq del último input consumido (reconciliación)
+  // ── Camuflaje/detección (P0.2/P0.3), autoritativo del servidor ──
+  camoScore: number; // 0..1 cuán camuflado está este Hider (viaja en el snapshot)
+  beingWatched: boolean; // un Seeker está fijando la mira sobre él AHORA (feedback; viaja en el snapshot)
+  lockTargetId: string; // (solo servidor) objetivo que este Seeker está fijando
+  lockTicks: number; // (solo servidor) ticks de fijación acumulados sobre lockTargetId
+  wantsCatch: boolean; // (solo servidor, transitorio) mantuvo el gatillo este tick
 
   constructor(id: string, role: PlayerRole = 'hider') {
     this.id = id;
@@ -30,10 +36,15 @@ export class PlayerState {
     this.vel = new Vec3();
     this.aimX = 0;
     this.aimZ = 1;
-    this.color = new ColorRGBA();
+    this.color = new ColorRGBA(255, 255, 255); // camaleón "blanco puro" (biblia de diseño)
     this.frozen = false;
     this.caught = false;
     this.colorLockedUntil = 0;
     this.lastProcessedInput = 0;
+    this.camoScore = 0;
+    this.beingWatched = false;
+    this.lockTargetId = '';
+    this.lockTicks = 0;
+    this.wantsCatch = false;
   }
 }

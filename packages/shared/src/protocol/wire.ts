@@ -19,12 +19,22 @@
 import { ServerMsg, type GamePhase, type PlayerRole } from './messages';
 import type { UserCommand } from './commands';
 
-export const PROTOCOL_VERSION = 1;
+// v2: el snapshot por jugador añade el score de camuflaje (u8) y el flag beingWatched
+// (bit 3 de roleFlags) — P0.2/P0.3. Cliente y servidor despliegan juntos (monorepo).
+export const PROTOCOL_VERSION = 2;
 export const MAX_SNAPSHOT_BYTES = 8192;
 export const MAX_INPUT_BYTES = 64;
 
 const POS_SCALE = 100; // punto fijo: metros → centímetros (int16: ±327 m)
 const DIR_SCALE = 1000; // movimiento/apunte normalizado → int16
+
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+/** Cuantiza un score 0..1 a un byte 0..255 (para el wire). */
+function packScore(v: number): number {
+  return Math.round(clamp01(v) * 255);
+}
 
 const PHASES: readonly GamePhase[] = ['lobby', 'prep', 'hunt', 'ended'];
 const OUTCOMES = ['none', 'hiders', 'seekers'] as const;
@@ -41,6 +51,8 @@ export interface WirePlayer {
   readonly frozen: boolean;
   readonly caught: boolean;
   readonly lastProcessedInput: number;
+  readonly camoScore: number; // 0..1 (P0.2)
+  readonly beingWatched: boolean; // un Seeker lo está fijando ahora (P0.3)
 }
 export interface WireWorld {
   readonly tick: number;
@@ -64,6 +76,8 @@ export interface DecodedPlayer {
   aimX: number;
   aimZ: number;
   colorPacked: number;
+  camoScore: number; // 0..1 (P0.2)
+  beingWatched: boolean; // un Seeker lo está fijando ahora (P0.3)
 }
 export interface DecodedSnapshot {
   type: 'keyframe' | 'delta';
@@ -159,7 +173,12 @@ const _snapWriter = new ByteWriter(new ArrayBuffer(MAX_SNAPSHOT_BYTES));
 const _inputWriter = new ByteWriter(new ArrayBuffer(MAX_INPUT_BYTES));
 
 function packRoleFlags(p: WirePlayer): number {
-  return (p.role === 'seeker' ? 1 : 0) | (p.frozen ? 2 : 0) | (p.caught ? 4 : 0);
+  return (
+    (p.role === 'seeker' ? 1 : 0) |
+    (p.frozen ? 2 : 0) |
+    (p.caught ? 4 : 0) |
+    (p.beingWatched ? 8 : 0)
+  );
 }
 function packColor(c: WirePlayer['color']): number {
   return (((c.r & 0xff) * 0x1000000) + ((c.g & 0xff) << 16) + ((c.b & 0xff) << 8) + (c.a & 0xff)) >>> 0;
@@ -201,6 +220,7 @@ function writePlayer(w: ByteWriter, p: WirePlayer): void {
   w.i16(Math.round(p.aimX * DIR_SCALE));
   w.i16(Math.round(p.aimZ * DIR_SCALE));
   w.u32(packColor(p.color));
+  w.u8(packScore(p.camoScore));
 }
 
 function writeHeader(w: ByteWriter, world: WireWorld, type: number, count: number): void {
@@ -243,8 +263,9 @@ function playerSignature(p: WirePlayer): number {
   mix(Math.round(p.aimX * DIR_SCALE));
   mix(Math.round(p.aimZ * DIR_SCALE));
   mix(packColor(p.color));
-  mix(packRoleFlags(p));
+  mix(packRoleFlags(p)); // incluye beingWatched (bit 3)
   mix(p.lastProcessedInput);
+  mix(packScore(p.camoScore));
   return h;
 }
 
@@ -286,18 +307,21 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
     const aimX = r.i16() / DIR_SCALE;
     const aimZ = r.i16() / DIR_SCALE;
     const colorPacked = r.u32();
+    const camoScore = r.u8() / 255;
     players.push({
       id,
       lastProcessedInput,
       role: (flags & 1) === 1 ? 'seeker' : 'hider',
       frozen: (flags & 2) === 2,
       caught: (flags & 4) === 4,
+      beingWatched: (flags & 8) === 8,
       x,
       y,
       z,
       aimX,
       aimZ,
       colorPacked,
+      camoScore,
     });
   }
   return {

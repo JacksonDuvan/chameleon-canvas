@@ -32,6 +32,8 @@ export interface RemoteEntity {
   frozen: boolean;
   caught: boolean;
   colorPacked: number;
+  camoScore: number; // 0..1 (P0.2)
+  beingWatched: boolean; // un Seeker lo está fijando (P0.3)
 }
 
 export interface WorldStoreState {

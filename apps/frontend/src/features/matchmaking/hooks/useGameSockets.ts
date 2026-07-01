@@ -93,6 +93,9 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
     if (p.id === st.localPlayerId) {
       // Jugador local: reconciliar (re-aplica los inputs no confirmados; sin snap).
       reconcile(st.local, pending, p, snap.phase, DEFAULT_SIM_CONFIG);
+      // Camuflaje/feedback son autoritativos del servidor (no se predicen): cópialos tal cual.
+      st.local.camoScore = p.camoScore;
+      st.local.beingWatched = p.beingWatched;
       continue;
     }
     seen.add(p.id);
@@ -106,6 +109,8 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
         frozen: p.frozen,
         caught: p.caught,
         colorPacked: p.colorPacked,
+        camoScore: p.camoScore,
+        beingWatched: p.beingWatched,
       };
       st.remotes.set(p.id, e);
     }
@@ -114,6 +119,8 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
     e.frozen = p.frozen;
     e.caught = p.caught;
     e.colorPacked = p.colorPacked;
+    e.camoScore = p.camoScore;
+    e.beingWatched = p.beingWatched;
   }
 
   // Un KEYFRAME es estado completo: elimina remotos ausentes (cambios de roster).

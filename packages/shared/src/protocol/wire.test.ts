@@ -22,6 +22,8 @@ function mkPlayer(id: string, over: Partial<WirePlayer> = {}): WirePlayer {
     frozen: false,
     caught: false,
     lastProcessedInput: 0,
+    camoScore: 0,
+    beingWatched: false,
     ...over,
   };
 }
@@ -65,7 +67,7 @@ describe('wire · KEYFRAME', () => {
         color: { r: 200, g: 30, b: 30, a: 255 },
         lastProcessedInput: 42,
       }),
-      mkPlayer('h1', { frozen: true, caught: false, pos: { x: -2.5, y: 1.5, z: 8 } }),
+      mkPlayer('h1', { frozen: true, caught: false, pos: { x: -2.5, y: 1.5, z: 8 }, camoScore: 0.75, beingWatched: true }),
     ]);
     const snap = decodeSnapshot(encodeKeyframe(world).slice().buffer);
     expect(snap.type).toBe('keyframe');
@@ -83,6 +85,8 @@ describe('wire · KEYFRAME', () => {
     const h1 = snap.players.find((p) => p.id === 'h1')!;
     expect(h1.frozen).toBe(true);
     expect(h1.y).toBeCloseTo(1.5, 2);
+    expect(h1.camoScore).toBeCloseTo(0.75, 2); // ±1/255 por la cuantización a u8
+    expect(h1.beingWatched).toBe(true);
   });
 });
 
@@ -118,5 +122,15 @@ describe('wire · DELTA', () => {
     expect(snap.players).toHaveLength(1);
     expect(snap.players[0]!.caught).toBe(true);
     expect(snap.players[0]!.role).toBe('seeker');
+  });
+
+  it('detecta cambios de camuflaje y de beingWatched (P0.2/P0.3)', () => {
+    const a = mkPlayer('a', { camoScore: 0.2 });
+    const baseline = captureBaseline(mkWorld([a]));
+    const changed = mkWorld([{ ...a, camoScore: 0.9, beingWatched: true }]);
+    const snap = decodeSnapshot(encodeDelta(baseline, changed).slice().buffer);
+    expect(snap.players).toHaveLength(1);
+    expect(snap.players[0]!.camoScore).toBeCloseTo(0.9, 2);
+    expect(snap.players[0]!.beingWatched).toBe(true);
   });
 });

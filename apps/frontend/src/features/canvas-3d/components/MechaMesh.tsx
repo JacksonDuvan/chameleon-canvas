@@ -38,7 +38,9 @@ export function Players() {
     _obj.updateMatrix();
     mesh.setMatrixAt(i, _obj.matrix);
     const lc = st.local.color;
-    _color.setRGB(lc.r / 255, lc.g / 255, lc.b / 255);
+    // Interpreta los bytes como sRGB (igual que el entorno y los remotos): así el color
+    // absorbido se ve idéntico a la superficie de la que se tomó → el camuflaje cuadra.
+    _color.setRGB(lc.r / 255, lc.g / 255, lc.b / 255, THREE.SRGBColorSpace);
     mesh.setColorAt(i, _color);
     i++;
 
@@ -49,7 +51,9 @@ export function Players() {
       _obj.position.set(e.render.x, e.render.y + BODY_HALF_HEIGHT, e.render.z);
       _obj.updateMatrix();
       mesh.setMatrixAt(i, _obj.matrix);
-      _color.set((e.colorPacked >>> 8) & 0xffffff); // 0xRRGGBBAA → 0xRRGGBB
+      // 0xRRGGBBAA → 0xRRGGBB, interpretado en sRGB (explícito; `.set(hex)` ya usa sRGB
+      // por defecto) para igualar al entorno y al jugador local.
+      _color.setHex((e.colorPacked >>> 8) & 0xffffff, THREE.SRGBColorSpace);
       mesh.setColorAt(i, _color);
       i++;
     }

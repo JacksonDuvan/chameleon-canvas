@@ -47,7 +47,7 @@ describe('ProcessTick', () => {
     expect(reloaded!.world.players.get('h')!.pos.x).toBeCloseTo(room.world.config.maxSpeed * DT, 9);
   });
 
-  it('orquesta la captura: en Hunt un Seeker atrapa a un Hider (este pasa a Seeker)', async () => {
+  it('orquesta la captura por fijación: en Hunt el Seeker sostiene la mira y atrapa a un Hider', async () => {
     const room = new Room('r1');
     spawnPlayer(room.world, 's');
     spawnPlayer(room.world, 'h');
@@ -61,13 +61,17 @@ describe('ProcessTick', () => {
     h.pos.setMut(2, 0, 0);
     const { tick } = setup(room);
 
-    expectOk(
-      await tick.execute({
-        roomId: 'r1',
-        commands: [cmd('s', { aimX: 1, aimZ: 0, action: ActionKind.CATCH })],
-        dt: DT,
-      }),
-    );
+    // La captura ya no es instantánea (P0.3): el Seeker mantiene el gatillo. Sostener la
+    // mira más que la fijación máxima garantiza el tag sea cual sea el camuflaje del objetivo.
+    for (let i = 0; i < room.world.config.fixationMaxTicks + 5; i++) {
+      expectOk(
+        await tick.execute({
+          roomId: 'r1',
+          commands: [cmd('s', { seq: i + 1, aimX: 1, aimZ: 0, action: ActionKind.CATCH })],
+          dt: DT,
+        }),
+      );
+    }
 
     expect(h.caught).toBe(true);
     expect(h.role).toBe('seeker');

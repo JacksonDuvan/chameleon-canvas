@@ -28,12 +28,27 @@ export function useRaycastColor(
       const hits = _raycaster.intersectObjects(scene.children, true);
       const hit = hits.find((h) => (h.object as Partial<THREE.Mesh>).material);
       if (!hit) return;
-      const material = (hit.object as THREE.Mesh).material;
-      const mat = (Array.isArray(material) ? material[0] : material) as THREE.MeshStandardMaterial;
-      if (!mat?.color) return;
-      const r = Math.round(mat.color.r * 255);
-      const g = Math.round(mat.color.g * 255);
-      const b = Math.round(mat.color.b * 255);
+      const obj = hit.object as THREE.Mesh;
+
+      // Preferir el color de referencia EXACTO que el servidor usa para puntuar el
+      // camuflaje (`userData.refColor`, bytes sRGB del mapa compartido): así "color
+      // absorbido == color de referencia" y absorber la superficie sube el score a tope.
+      // Fallback (superficie sin etiqueta): el color del material convertido a sRGB.
+      let r: number, g: number, b: number;
+      const packed = obj.userData?.refColor as number | undefined;
+      if (typeof packed === 'number') {
+        r = (packed >>> 24) & 0xff;
+        g = (packed >>> 16) & 0xff;
+        b = (packed >>> 8) & 0xff;
+      } else {
+        const material = obj.material;
+        const mat = (Array.isArray(material) ? material[0] : material) as THREE.MeshStandardMaterial;
+        if (!mat?.color) return;
+        const hex = mat.color.getHex(THREE.SRGBColorSpace); // lineal → bytes sRGB
+        r = (hex >> 16) & 0xff;
+        g = (hex >> 8) & 0xff;
+        b = hex & 0xff;
+      }
       worldStore.getState().local.color.setMut(r, g, b, 255); // optimista
       sendControl({ type: 'color', r, g, b, a: 255 }); // autoritativo
     };

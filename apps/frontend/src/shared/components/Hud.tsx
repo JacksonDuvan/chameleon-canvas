@@ -4,7 +4,7 @@
  * es seguro re-renderizar (skill `r3f-rendering`, regla 4). NUNCA lee estado por-frame:
  * la cuenta atrás se deriva del `serverTick` con un `setInterval`, no con `useFrame`.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
@@ -47,6 +47,58 @@ function usePhaseCountdown(phase: string): number | null {
   return left;
 }
 
+interface LocalStatus {
+  camo: number; // 0..1 camuflaje del jugador local
+  watched: boolean; // un Seeker lo está fijando
+  caught: boolean; // fue atrapado
+}
+
+/**
+ * Estado de camuflaje/detección del jugador local, leído de forma TRANSITORIA (getState)
+ * con un `setInterval` (no por frame ni con selector reactivo sobre estado rápido). El
+ * bail-out (`prev`) evita re-render salvo cambio real; en Hunt (Hider congelado) el score
+ * es estable ⇒ no re-renderiza. Skill `r3f-rendering`.
+ */
+function useLocalStatus(): LocalStatus {
+  const [status, setStatus] = useState<LocalStatus>({ camo: 0, watched: false, caught: false });
+  useEffect(() => {
+    const compute = (): void => {
+      const l = worldStore.getState().local;
+      setStatus((prev) =>
+        prev.camo === l.camoScore && prev.watched === l.beingWatched && prev.caught === l.caught
+          ? prev
+          : { camo: l.camoScore, watched: l.beingWatched, caught: l.caught },
+      );
+    };
+    compute();
+    const id = setInterval(compute, 150);
+    return () => clearInterval(id);
+  }, []);
+  return status;
+}
+
+/** Destello transitorio cuando el jugador local acaba de ser atrapado (false→true). */
+function useJustCaught(caught: boolean): boolean {
+  const [flash, setFlash] = useState(false);
+  const prev = useRef(false);
+  useEffect(() => {
+    if (caught && !prev.current) {
+      prev.current = true;
+      setFlash(true);
+      const id = setTimeout(() => setFlash(false), 2500);
+      return () => clearTimeout(id);
+    }
+    if (!caught) prev.current = false;
+    return undefined;
+  }, [caught]);
+  return flash;
+}
+
+/** Color de la barra de camuflaje: rojo (0) → ámbar → verde (1). */
+function camoColor(v: number): string {
+  return `hsl(${Math.round(v * 120)}, 75%, 45%)`;
+}
+
 const BAR: React.CSSProperties = {
   position: 'absolute',
   top: 0,
@@ -81,9 +133,15 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
   const localRole = useStore(worldStore, (s) => s.localRole);
   const lastError = useStore(worldStore, (s) => s.lastError);
   const countdown = usePhaseCountdown(phase);
+  const status = useLocalStatus();
+  const justCaught = useJustCaught(status.caught);
 
   const roleBadge =
     localRole === 'seeker' ? '🔦 Eres Seeker — atrapa a los Hiders' : '🦎 Eres Hider — escóndete';
+
+  // La barra de camuflaje y el aviso de fijación son para el Hider vivo, en juego.
+  const showCamo = localRole === 'hider' && !status.caught && (phase === 'prep' || phase === 'hunt');
+  const camoPct = Math.round(status.camo * 100);
 
   return (
     <>
@@ -98,9 +156,87 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
         <span style={{ opacity: 0.6 }}>{connected ? '● conectado' : '○ desconectado'}</span>
         {lastError && <span style={{ color: '#ff8a8a' }}>⚠ {lastError}</span>}
         <span style={{ marginLeft: 'auto', opacity: 0.5 }}>
-          WASD mover · E absorber color · Espacio pose · F atrapar
+          WASD mover · E absorber color · Espacio pose · F (mantén) fijar y atrapar
         </span>
       </div>
+
+      {/* Barra de camuflaje (Hider): verde = fundido con el entorno, rojo = visible */}
+      {showCamo && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 260,
+            font: '600 13px system-ui, sans-serif',
+            color: '#fff',
+            textShadow: '0 1px 2px #000a',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span>Camuflaje</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{camoPct}%</span>
+          </div>
+          <div style={{ height: 10, borderRadius: 6, background: '#0006', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${camoPct}%`,
+                height: '100%',
+                background: camoColor(status.camo),
+                transition: 'width 120ms linear, background 120ms linear',
+              }}
+            />
+          </div>
+          {phase === 'prep' && (
+            <div style={{ opacity: 0.7, fontWeight: 400, marginTop: 4 }}>
+              Absorbe (E) el color de tu escondite y quédate quieto para fundirte
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Aviso de fijación: un Seeker te está mirando AHORA */}
+      {showCamo && status.watched && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 64,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 18px',
+            borderRadius: 10,
+            background: '#c0202088',
+            border: '1px solid #ff6a6a',
+            color: '#fff',
+            font: '700 15px system-ui, sans-serif',
+            pointerEvents: 'none',
+          }}
+        >
+          👁 ¡Te están fijando! Aguanta camuflado…
+        </div>
+      )}
+
+      {/* Destello al ser atrapado */}
+      {justCaught && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#c0202033',
+            color: '#fff',
+            font: '800 30px system-ui, sans-serif',
+            textShadow: '0 2px 8px #000',
+            pointerEvents: 'none',
+          }}
+        >
+          ¡Atrapado! Ahora eres Seeker 🔦
+        </div>
+      )}
 
       {/* Botón Empezar (solo el host, en Lobby) */}
       {phase === 'lobby' && (
