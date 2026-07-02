@@ -12,7 +12,7 @@ const DT = 1 / 30;
 const cfg = DEFAULT_SIM_CONFIG;
 
 function cmd(playerId: string, over: Partial<UserCommand> = {}): UserCommand {
-  return { seq: 1, playerId, moveX: 0, moveZ: 0, aimX: 0, aimZ: 1, action: ActionKind.NONE, ...over };
+  return { seq: 1, playerId, moveX: 0, moveZ: 0, aimX: 0, aimY: 0, aimZ: 1, pose: 0, action: ActionKind.NONE, ...over };
 }
 
 describe('canMove', () => {
@@ -35,17 +35,22 @@ describe('canMove', () => {
 });
 
 describe('applyAim', () => {
-  it('normaliza el apunte', () => {
+  it('normaliza el apunte 3D (incluye pitch)', () => {
     const p = new PlayerState('p');
-    applyAim(p, cmd('p', { aimX: 5, aimZ: 0 }));
+    applyAim(p, cmd('p', { aimX: 5, aimY: 0, aimZ: 0 }));
     expect(p.aimX).toBeCloseTo(1, 9);
+    expect(p.aimZ).toBeCloseTo(0, 9);
+
+    applyAim(p, cmd('p', { aimX: 3, aimY: -4, aimZ: 0 })); // pitch hacia abajo
+    expect(p.aimX).toBeCloseTo(0.6, 9);
+    expect(p.aimY).toBeCloseTo(-0.8, 9);
     expect(p.aimZ).toBeCloseTo(0, 9);
   });
 
   it('conserva el apunte previo si el comando trae vector cero', () => {
-    const p = new PlayerState('p'); // aim por defecto (0,1)
-    applyAim(p, cmd('p', { aimX: 0, aimZ: 0 }));
-    expect([p.aimX, p.aimZ]).toEqual([0, 1]);
+    const p = new PlayerState('p'); // aim por defecto (0,0,1)
+    applyAim(p, cmd('p', { aimX: 0, aimY: 0, aimZ: 0 }));
+    expect([p.aimX, p.aimY, p.aimZ]).toEqual([0, 0, 1]);
   });
 });
 
@@ -55,6 +60,38 @@ describe('applyMovement', () => {
     applyMovement(p, cmd('p', { moveX: 1, moveZ: 1 }), cfg, DT);
     const speed = Math.sqrt(p.pos.x ** 2 + p.pos.z ** 2) / DT;
     expect(speed).toBeCloseTo(cfg.maxSpeed, 6);
+  });
+
+  it('NO atraviesa un prop sólido: el jugador queda pegado a su borde (V1-A)', () => {
+    const map = {
+      id: 'm',
+      bounds: cfg.bounds,
+      floorColor: 0xffffffff,
+      zones: [
+        { id: 'box', kind: 'prop' as const, minX: 1, maxX: 3, minZ: -1, maxZ: 1, y: 1, height: 2, color: 0xffffffff, roughness: 1, metalness: 0 },
+      ],
+      spawns: [],
+    };
+    const p = new PlayerState('p');
+    // Empuja +x contra la caja durante 60 ticks: sin colisión llegaría a x=12.
+    for (let i = 0; i < 60; i++) applyMovement(p, cmd('p', { moveX: 1 }), cfg, DT, map);
+    expect(p.pos.x).toBeCloseTo(1 - cfg.playerRadius, 6); // pegado al borde oeste de la caja
+  });
+
+  it('resbala a lo largo del sólido (la componente tangencial no se pierde)', () => {
+    const map = {
+      id: 'm',
+      bounds: cfg.bounds,
+      floorColor: 0xffffffff,
+      zones: [
+        { id: 'box', kind: 'prop' as const, minX: 1, maxX: 3, minZ: -10, maxZ: 10, y: 1, height: 2, color: 0xffffffff, roughness: 1, metalness: 0 },
+      ],
+      spawns: [],
+    };
+    const p = new PlayerState('p');
+    for (let i = 0; i < 30; i++) applyMovement(p, cmd('p', { moveX: 1, moveZ: 1 }), cfg, DT, map);
+    expect(p.pos.x).toBeCloseTo(1 - cfg.playerRadius, 6); // bloqueado en x…
+    expect(p.pos.z).toBeGreaterThan(3); // …pero avanza en z (deslizamiento)
   });
 });
 

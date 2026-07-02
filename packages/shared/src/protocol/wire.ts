@@ -19,9 +19,13 @@
 import { ServerMsg, type GamePhase, type PlayerRole } from './messages';
 import type { UserCommand } from './commands';
 
-// v2: el snapshot por jugador añade el score de camuflaje (u8) y el flag beingWatched
-// (bit 3 de roleFlags) — P0.2/P0.3. Cliente y servidor despliegan juntos (monorepo).
-export const PROTOCOL_VERSION = 2;
+// v2: snapshot por jugador + camoScore (u8) y beingWatched (bit 3) — P0.2/P0.3.
+// v3 (V1-B/V1-C): INPUT + aimY (i16, pitch) y pose (u8); snapshot + pose (bits 4-5 de
+// roleFlags), aimY (i16) y lockProgress (u8).
+// v4 (modelo de DISPAROS del original, post-playtest): fuera beingWatched y
+// lockProgress; entra `ammo` (u8, munición restante del Seeker). El bit 3 de roleFlags
+// queda RESERVADO. Cliente y servidor despliegan juntos (monorepo).
+export const PROTOCOL_VERSION = 4;
 export const MAX_SNAPSHOT_BYTES = 8192;
 export const MAX_INPUT_BYTES = 64;
 
@@ -45,6 +49,7 @@ export interface WirePlayer {
   readonly id: string;
   readonly pos: { readonly x: number; readonly y: number; readonly z: number };
   readonly aimX: number;
+  readonly aimY: number; // pitch del apunte (necesario para reconciliar el aim 3D)
   readonly aimZ: number;
   readonly color: { readonly r: number; readonly g: number; readonly b: number; readonly a: number };
   readonly role: PlayerRole;
@@ -52,7 +57,8 @@ export interface WirePlayer {
   readonly caught: boolean;
   readonly lastProcessedInput: number;
   readonly camoScore: number; // 0..1 (P0.2)
-  readonly beingWatched: boolean; // un Seeker lo está fijando ahora (P0.3)
+  readonly pose: number; // pose del Hider 0..3 (V1-B; viaja en bits 4-5 de roleFlags)
+  readonly ammo: number; // disparos restantes del Seeker (v4; HUD de munición)
 }
 export interface WireWorld {
   readonly tick: number;
@@ -74,10 +80,12 @@ export interface DecodedPlayer {
   y: number;
   z: number;
   aimX: number;
+  aimY: number;
   aimZ: number;
   colorPacked: number;
   camoScore: number; // 0..1 (P0.2)
-  beingWatched: boolean; // un Seeker lo está fijando ahora (P0.3)
+  pose: number; // pose del Hider 0..3 (V1-B)
+  ammo: number; // disparos restantes del Seeker (v4)
 }
 export interface DecodedSnapshot {
   type: 'keyframe' | 'delta';
@@ -173,11 +181,12 @@ const _snapWriter = new ByteWriter(new ArrayBuffer(MAX_SNAPSHOT_BYTES));
 const _inputWriter = new ByteWriter(new ArrayBuffer(MAX_INPUT_BYTES));
 
 function packRoleFlags(p: WirePlayer): number {
+  // bit 3 RESERVADO (fue beingWatched en v2/v3).
   return (
     (p.role === 'seeker' ? 1 : 0) |
     (p.frozen ? 2 : 0) |
     (p.caught ? 4 : 0) |
-    (p.beingWatched ? 8 : 0)
+    ((p.pose & 3) << 4)
   );
 }
 function packColor(c: WirePlayer['color']): number {
@@ -192,8 +201,10 @@ export function encodeInput(input: InputPayload): Uint8Array {
   w.i16(Math.round(input.moveX * DIR_SCALE));
   w.i16(Math.round(input.moveZ * DIR_SCALE));
   w.i16(Math.round(input.aimX * DIR_SCALE));
+  w.i16(Math.round(input.aimY * DIR_SCALE));
   w.i16(Math.round(input.aimZ * DIR_SCALE));
   w.u8(input.action);
+  w.u8(input.pose & 0xff);
   return w.bytes();
 }
 
@@ -204,9 +215,11 @@ export function decodeInput(data: ArrayBuffer): InputPayload {
   const moveX = r.i16() / DIR_SCALE;
   const moveZ = r.i16() / DIR_SCALE;
   const aimX = r.i16() / DIR_SCALE;
+  const aimY = r.i16() / DIR_SCALE;
   const aimZ = r.i16() / DIR_SCALE;
   const action = r.u8() as InputPayload['action'];
-  return { seq, moveX, moveZ, aimX, aimZ, action };
+  const pose = r.u8();
+  return { seq, moveX, moveZ, aimX, aimY, aimZ, action, pose };
 }
 
 // ── SNAPSHOT (servidor → cliente) ──
@@ -218,9 +231,11 @@ function writePlayer(w: ByteWriter, p: WirePlayer): void {
   w.i16(Math.round(p.pos.y * POS_SCALE));
   w.i16(Math.round(p.pos.z * POS_SCALE));
   w.i16(Math.round(p.aimX * DIR_SCALE));
+  w.i16(Math.round(p.aimY * DIR_SCALE));
   w.i16(Math.round(p.aimZ * DIR_SCALE));
   w.u32(packColor(p.color));
   w.u8(packScore(p.camoScore));
+  w.u8(p.ammo > 255 ? 255 : p.ammo & 0xff);
 }
 
 function writeHeader(w: ByteWriter, world: WireWorld, type: number, count: number): void {
@@ -261,11 +276,13 @@ function playerSignature(p: WirePlayer): number {
   mix(Math.round(p.pos.y * POS_SCALE));
   mix(Math.round(p.pos.z * POS_SCALE));
   mix(Math.round(p.aimX * DIR_SCALE));
+  mix(Math.round(p.aimY * DIR_SCALE));
   mix(Math.round(p.aimZ * DIR_SCALE));
   mix(packColor(p.color));
-  mix(packRoleFlags(p)); // incluye beingWatched (bit 3)
+  mix(packRoleFlags(p)); // incluye la pose (bits 4-5)
   mix(p.lastProcessedInput);
   mix(packScore(p.camoScore));
+  mix(p.ammo);
   return h;
 }
 
@@ -305,23 +322,27 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
     const y = r.i16() / POS_SCALE;
     const z = r.i16() / POS_SCALE;
     const aimX = r.i16() / DIR_SCALE;
+    const aimY = r.i16() / DIR_SCALE;
     const aimZ = r.i16() / DIR_SCALE;
     const colorPacked = r.u32();
     const camoScore = r.u8() / 255;
+    const ammo = r.u8();
     players.push({
       id,
       lastProcessedInput,
       role: (flags & 1) === 1 ? 'seeker' : 'hider',
       frozen: (flags & 2) === 2,
       caught: (flags & 4) === 4,
-      beingWatched: (flags & 8) === 8,
+      pose: (flags >> 4) & 3,
       x,
       y,
       z,
       aimX,
+      aimY,
       aimZ,
       colorPacked,
       camoScore,
+      ammo,
     });
   }
   return {

@@ -7,6 +7,7 @@ import { Environment } from './Environment';
 import { Players } from './MechaMesh';
 import { CameraRig } from './CameraRig';
 import { LocalMarker } from './LocalMarker';
+import { ShotTracers } from './ShotTracers';
 
 export function Scene() {
   return (
@@ -15,6 +16,7 @@ export function Scene() {
       <Environment />
       <Players />
       <LocalMarker />
+      <ShotTracers />
     </>
   );
 }

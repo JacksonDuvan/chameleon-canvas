@@ -3,24 +3,27 @@
  * lo ejecuta el servidor (autoritativo, `ProcessTick`) y reutiliza las MISMAS
  * funciones de movimiento (`@sim/core/movement`) que el cliente usa para predecir.
  *
- * Responsabilidades del MVP: aplicar inputs (apunte + movimiento con clamp), reglas
- * por fase, score de CAMUFLAJE por Hider (P0.2), CAPTURA POR FIJACIÓN del Seeker
- * (P0.3, modelo híbrido) y la transición temporizada de fase.
+ * Responsabilidades: aplicar inputs (apunte 3D + movimiento con colisión + pose),
+ * score de CAMUFLAJE por Hider (P0.2, feedback), DISPAROS del Seeker (modelo del
+ * original: tag por impacto instantáneo, munición limitada, cooldown; el rayo lo
+ * bloquean los sólidos del mapa y usa el hitbox por pose del objetivo) y la
+ * transición temporizada de fase.
  *
  * Skills: `authoritative-netcode` (servidor autoritativo, timestep fijo, input =
- * intención) + `workers-memory-optimization` (muta el estado, sin asignaciones
- * por-tick; `_refColor` es scratch de módulo) + `hexagonal-vertical-slicing` (puro;
- * la física entra por el puerto; el mapa entra como dato).
+ * intención; nunca "acerté" del cliente) + `workers-memory-optimization` (muta el
+ * estado, sin asignaciones por-tick; `_refColor` es scratch de módulo) +
+ * `hexagonal-vertical-slicing` (puro; la física entra por el puerto; el mapa como dato).
  *
  * El mundo se MUTA in situ (no se devuelve uno nuevo).
  */
 import type { WorldState } from './entities/WorldState';
 import type { Rng } from './rng';
 import type { IPhysicsWorld } from '../physics/IPhysicsWorld';
-import { advancePhaseIfDue } from './phases';
+import { advancePhaseIfDue, anyHiderAlive } from './phases';
 import { applyAim, applyMovement, canMove } from './movement';
-import { computeCamouflage, requiredFixationTicks } from './camouflage';
+import { computeCamouflage } from './camouflage';
 import { DEFAULT_MAP, referenceColorAt, type MapData } from './map/MapData';
+import { clampPose } from './pose';
 import { ColorRGBA } from './value-objects/ColorRGBA';
 import { ActionKind, type UserCommand } from '@shared/protocol';
 
@@ -38,19 +41,17 @@ export function step(
   world.tick++;
   const cfg = world.config;
 
-  // ── Reset de flags/intenciones transitorias del tick ──
+  // ── Reset transitorio del tick ──
   // La velocidad se pone a 0 aquí para que represente "lo movido ESTE tick": si un
   // jugador no manda comando (p. ej. pérdida de paquete), `applyMovement` no corre y su
   // `vel` no debe arrastrar la del tick anterior, o el camuflaje lo penalizaría por
   // "moverse" cuando está quieto. Los que sí mueven la re-establecen en `applyMovement`.
   for (const p of world.players.values()) {
-    p.beingWatched = false;
-    p.wantsCatch = false;
     p.vel.setMut(0, 0, 0);
   }
 
-  // ── Pase 1: aplicar inputs (apunte + movimiento + acciones que no son raycast) ──
-  let anyCatch = false;
+  // ── Pase 1: aplicar inputs (apunte + movimiento + pose) ──
+  let anyShot = false;
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i];
     if (!cmd) continue;
@@ -58,19 +59,24 @@ export function step(
     if (!p) continue;
 
     p.lastProcessedInput = cmd.seq; // estampa para la reconciliación del cliente
-    applyAim(p, cmd); // re-normaliza el apunte (mismas funciones que la predicción)
-    if (canMove(world.phase, p)) applyMovement(p, cmd, cfg, dt);
+    applyAim(p, cmd); // re-normaliza el apunte 3D (mismas funciones que la predicción)
+    if (canMove(world.phase, p)) applyMovement(p, cmd, cfg, dt, map);
 
-    if (cmd.action === ActionKind.FREEZE && p.role === 'hider') {
-      p.frozen = true; // el Hider congela su pose
-    } else if (cmd.action === ActionKind.CATCH && p.role === 'seeker' && world.phase === 'hunt') {
-      p.wantsCatch = true; // mantiene el gatillo: la fijación se resuelve en el pase 3
-      anyCatch = true;
+    // Pose (V1-B): solo el Hider, en Prep y sin congelar (en Hunt queda fija).
+    // `clampPose` sanea el valor del cliente (anti-cheat). El cliente la predice con
+    // esta MISMA regla (prediction.ts) para que la reconciliación converja.
+    if (p.role === 'hider' && !p.frozen && world.phase === 'prep') {
+      p.pose = clampPose(cmd.pose);
+    }
+
+    if (cmd.action === ActionKind.CATCH && p.role === 'seeker' && world.phase === 'hunt') {
+      anyShot = true; // resuelto en el pase 3 (tras integrar el movimiento de todos)
     }
   }
 
-  // ── Pase 2: camuflaje (P0.2). Tras integrar el movimiento, cada Hider tiene un score
-  //    determinista según cuánto encaja su color con el entorno y si está quieto. ──
+  // ── Pase 2: camuflaje (P0.2, feedback del Hider). Tras integrar el movimiento, cada
+  //    Hider tiene un score determinista según cuánto encaja su color con el entorno y
+  //    si está quieto. NO modula la captura (percepción, como el original). ──
   for (const p of world.players.values()) {
     if (p.role !== 'hider') {
       p.camoScore = 0;
@@ -81,65 +87,62 @@ export function step(
     p.camoScore = computeCamouflage(p.color, _refColor, speed, cfg);
   }
 
-  // ── Pase 3: captura por FIJACIÓN (P0.3, híbrido). El Seeker que mantiene el gatillo
-  //    acumula ticks de mira sostenida sobre su objetivo; captura cuando alcanza la
-  //    fijación requerida (mayor cuanto mejor camuflado está el objetivo). Nada pasivo:
-  //    sin gatillo mantenido no pasa nada (no hay "detector" de Hiders).
-  //    NOTA de diseño: la fijación NO exige que el Seeker se mueva — apuntar-y-sostener
-  //    parado es válido y fiel (el original es "apunta y dispara"). El "barrer" de la
-  //    biblia es ritmo de juego sugerido, no una regla del sistema. ──
-  if (anyCatch && world.phase === 'hunt') {
+  // ── Pase 3: DISPAROS (modelo del original). Cada CATCH es un disparo instantáneo
+  //    con cooldown; el impacto lo resuelve el raycast del servidor — bloqueado por
+  //    los sólidos del mapa (oclusión) y contra el hitbox por pose del objetivo.
+  //    Acertar a un Hider = tag (pasa a Seeker). El camuflaje engaña al OJO, no al rayo.
+  //    Munición: ILIMITADA por defecto (juego base). Con `ammoLimitEnabled` (modo del
+  //    update 2.3.0 del original): fallar cuesta 1, acertar es GRATIS, y si todos los
+  //    Seekers llegan a 0 los Hiders ganan al instante. ──
+  if (anyShot) {
     physics.syncBodies(world); // refleja las posiciones ya integradas
-    for (const seeker of world.players.values()) {
-      if (seeker.role !== 'seeker') continue;
-      if (!seeker.wantsCatch) {
-        // soltó el gatillo → se pierde la fijación
-        seeker.lockTargetId = '';
-        seeker.lockTicks = 0;
-        continue;
-      }
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i];
+      if (!cmd || cmd.action !== ActionKind.CATCH) continue;
+      const seeker = world.players.get(cmd.playerId);
+      if (!seeker || seeker.role !== 'seeker' || world.phase !== 'hunt') continue;
+      if (world.tick < seeker.shotCooldownUntil) continue;
+      if (cfg.ammoLimitEnabled && seeker.ammo <= 0) continue;
+
+      seeker.shotCooldownUntil = world.tick + cfg.shotCooldownTicks;
+
       const oy = seeker.pos.y + cfg.eyeHeight;
-      // seeker.aimX/aimZ ya están normalizados (pase 1): cumplen el contrato de raySphere.
       const hit = physics.raycastClosest(
         seeker.pos.x,
         oy,
         seeker.pos.z,
         seeker.aimX,
-        0, // disparo horizontal
+        seeker.aimY,
         seeker.aimZ,
         cfg.catchRange,
         seeker.id,
       );
       const target = hit ? world.players.get(hit.playerId) : undefined;
-      if (!target || target.role !== 'hider' || target.caught) {
-        // apunta al vacío o a un no-Hider → se pierde la fijación
-        seeker.lockTargetId = '';
-        seeker.lockTicks = 0;
-        continue;
-      }
-      // Acumula fijación sobre este objetivo (se reinicia si cambia de objetivo).
-      if (seeker.lockTargetId === target.id) seeker.lockTicks++;
-      else {
-        seeker.lockTargetId = target.id;
-        seeker.lockTicks = 1;
-      }
-      target.beingWatched = true; // feedback: el Hider siente que lo están fijando
-      if (seeker.lockTicks >= requiredFixationTicks(target.camoScore, cfg)) {
-        // Un Hider atrapado pasa a Seeker para ayudar a buscar al resto.
+      if (target && target.role === 'hider' && !target.caught) {
+        // ACIERTO (gratis en el modo limitado): el Hider pasa a Seeker (infección).
         target.caught = true;
         target.role = 'seeker';
         target.frozen = false;
-        target.beingWatched = false;
-        seeker.lockTargetId = '';
-        seeker.lockTicks = 0;
+        target.ammo = cfg.shotAmmo;
+        target.shotCooldownUntil = world.tick + cfg.shotCooldownTicks;
+      } else if (cfg.ammoLimitEnabled) {
+        seeker.ammo--; // FALLO: cuesta una bala (solo en modo limitado)
       }
     }
-  } else {
-    // Ningún Seeker disparó este tick → todos sueltan su fijación.
-    for (const p of world.players.values()) {
-      if (p.role === 'seeker') {
-        p.lockTargetId = '';
-        p.lockTicks = 0;
+
+    // Modo limitado: si NINGÚN Seeker conserva munición, los Hiders ganan al instante.
+    if (cfg.ammoLimitEnabled && world.phase === 'hunt') {
+      let anyAmmo = false;
+      for (const p of world.players.values()) {
+        if (p.role === 'seeker' && p.ammo > 0) {
+          anyAmmo = true;
+          break;
+        }
+      }
+      if (!anyAmmo) {
+        world.phase = 'ended';
+        world.phaseEndsAtTick = 0;
+        world.outcome = anyHiderAlive(world) ? 'hiders' : 'seekers';
       }
     }
   }

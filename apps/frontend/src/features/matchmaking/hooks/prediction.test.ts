@@ -14,7 +14,9 @@ function pending(seq: number, moveX = 1): PendingInput {
     moveX,
     moveZ: 0,
     aimX: 1,
+    aimY: 0,
     aimZ: 0,
+    pose: 0,
     action: ActionKind.NONE,
   };
   return { seq, cmd, dt: DT };
@@ -27,10 +29,12 @@ function authAt(lastProcessedInput: number, x: number): AuthoritativeLocal {
     y: 0,
     z: 0,
     aimX: 1,
+    aimY: 0,
     aimZ: 0,
     role: 'hider',
     frozen: false,
     caught: false,
+    pose: 0,
   };
 }
 
@@ -113,7 +117,7 @@ describe('reconcile', () => {
     expect(buf.map((p) => p.seq)).toEqual([1, 2]); // siguen pendientes
   });
 
-  it('reconcilia rol/frozen/caught y aim al estado autoritativo', () => {
+  it('reconcilia rol/frozen/caught/pose y aim al estado autoritativo', () => {
     const local = new PlayerState('local', 'hider');
     const auth: AuthoritativeLocal = {
       lastProcessedInput: 5,
@@ -121,14 +125,18 @@ describe('reconcile', () => {
       y: 0,
       z: 2,
       aimX: 0,
+      aimY: -0.5,
       aimZ: 1,
       role: 'seeker',
       frozen: false,
       caught: true,
+      pose: 2,
     };
     reconcile(local, [], auth, 'hunt', cfg);
     expect(local.role).toBe('seeker');
     expect(local.caught).toBe(true);
+    expect(local.pose).toBe(2);
+    expect(local.aimY).toBe(-0.5); // el pitch también se reconcilia (aim 3D completo)
     expect([local.pos.x, local.pos.z]).toEqual([1, 2]);
   });
 });

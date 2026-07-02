@@ -50,6 +50,10 @@ export function startGame(world: WorldState, rng: Rng): void {
     p.role = i < seekerCount ? 'seeker' : 'hider';
     p.frozen = false;
     p.caught = false;
+    p.pose = 0;
+    // Economía de disparos (original): los Seekers reciben munición limitada.
+    p.ammo = p.role === 'seeker' ? world.config.shotAmmo : 0;
+    p.shotCooldownUntil = 0;
   }
 
   world.phase = 'prep';
@@ -71,6 +75,9 @@ export function resetToLobby(world: WorldState): void {
     p.frozen = false;
     p.caught = false;
     p.colorLockedUntil = 0;
+    p.pose = 0;
+    p.ammo = 0;
+    p.shotCooldownUntil = 0;
     p.pos.setMut(((i % 5) - 2) * 2, 0, (Math.floor(i / 5) - 2) * 2);
     i++;
   }

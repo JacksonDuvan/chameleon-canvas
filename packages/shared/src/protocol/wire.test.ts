@@ -16,6 +16,7 @@ function mkPlayer(id: string, over: Partial<WirePlayer> = {}): WirePlayer {
     id,
     pos: { x: 0, y: 0, z: 0 },
     aimX: 0,
+    aimY: 0,
     aimZ: 1,
     color: { r: 0, g: 0, b: 0, a: 255 },
     role: 'hider',
@@ -23,7 +24,8 @@ function mkPlayer(id: string, over: Partial<WirePlayer> = {}): WirePlayer {
     caught: false,
     lastProcessedInput: 0,
     camoScore: 0,
-    beingWatched: false,
+    pose: 0,
+    ammo: 0,
     ...over,
   };
 }
@@ -39,21 +41,25 @@ function mkWorld(players: WirePlayer[], over: Partial<WireWorld> = {}): WireWorl
 }
 
 describe('wire · INPUT', () => {
-  it('round-trip dentro de la tolerancia de cuantización', () => {
+  it('round-trip dentro de la tolerancia de cuantización (incluye aimY y pose, v3)', () => {
     const input = {
       seq: 123456,
       moveX: 0.5,
       moveZ: -1,
-      aimX: 0.707,
-      aimZ: -0.707,
+      aimX: 0.694,
+      aimY: -0.194, // pitch hacia abajo (mouse-look del Seeker)
+      aimZ: -0.694,
+      pose: 2, // bola
       action: ActionKind.CATCH,
     };
     const decoded = decodeInput(encodeInput(input).slice().buffer);
     expect(decoded.seq).toBe(123456);
     expect(decoded.moveX).toBeCloseTo(0.5, 3);
     expect(decoded.moveZ).toBeCloseTo(-1, 3);
-    expect(decoded.aimX).toBeCloseTo(0.707, 3);
-    expect(decoded.aimZ).toBeCloseTo(-0.707, 3);
+    expect(decoded.aimX).toBeCloseTo(0.694, 3);
+    expect(decoded.aimY).toBeCloseTo(-0.194, 3);
+    expect(decoded.aimZ).toBeCloseTo(-0.694, 3);
+    expect(decoded.pose).toBe(2);
     expect(decoded.action).toBe(ActionKind.CATCH);
   });
 });
@@ -64,10 +70,12 @@ describe('wire · KEYFRAME', () => {
       mkPlayer('s1', {
         role: 'seeker',
         pos: { x: 1.23, y: 0, z: -4.56 },
+        aimY: -0.3, // apuntando hacia abajo (pitch)
         color: { r: 200, g: 30, b: 30, a: 255 },
         lastProcessedInput: 42,
+        ammo: 7,
       }),
-      mkPlayer('h1', { frozen: true, caught: false, pos: { x: -2.5, y: 1.5, z: 8 }, camoScore: 0.75, beingWatched: true }),
+      mkPlayer('h1', { frozen: true, caught: false, pos: { x: -2.5, y: 1.5, z: 8 }, camoScore: 0.75, pose: 3 }),
     ]);
     const snap = decodeSnapshot(encodeKeyframe(world).slice().buffer);
     expect(snap.type).toBe('keyframe');
@@ -80,13 +88,15 @@ describe('wire · KEYFRAME', () => {
     expect(s1.lastProcessedInput).toBe(42);
     expect(s1.x).toBeCloseTo(1.23, 2);
     expect(s1.z).toBeCloseTo(-4.56, 2);
+    expect(s1.aimY).toBeCloseTo(-0.3, 3); // el pitch viaja en el snapshot (reconciliación)
     expect(s1.colorPacked).toBe(0xc81e1eff >>> 0);
+    expect(s1.ammo).toBe(7); // munición restante (v4)
 
     const h1 = snap.players.find((p) => p.id === 'h1')!;
     expect(h1.frozen).toBe(true);
     expect(h1.y).toBeCloseTo(1.5, 2);
     expect(h1.camoScore).toBeCloseTo(0.75, 2); // ±1/255 por la cuantización a u8
-    expect(h1.beingWatched).toBe(true);
+    expect(h1.pose).toBe(3); // wall-flat (bits 4-5 de roleFlags)
   });
 });
 
@@ -124,13 +134,28 @@ describe('wire · DELTA', () => {
     expect(snap.players[0]!.role).toBe('seeker');
   });
 
-  it('detecta cambios de camuflaje y de beingWatched (P0.2/P0.3)', () => {
+  it('detecta cambios de camuflaje (P0.2)', () => {
     const a = mkPlayer('a', { camoScore: 0.2 });
     const baseline = captureBaseline(mkWorld([a]));
-    const changed = mkWorld([{ ...a, camoScore: 0.9, beingWatched: true }]);
+    const changed = mkWorld([{ ...a, camoScore: 0.9 }]);
     const snap = decodeSnapshot(encodeDelta(baseline, changed).slice().buffer);
     expect(snap.players).toHaveLength(1);
     expect(snap.players[0]!.camoScore).toBeCloseTo(0.9, 2);
-    expect(snap.players[0]!.beingWatched).toBe(true);
+  });
+
+  it('detecta cambios de pose y de munición (V1-B / v4)', () => {
+    const a = mkPlayer('a');
+    const baseline = captureBaseline(mkWorld([a]));
+    const posed = mkWorld([{ ...a, pose: 1 }]);
+    const snapPose = decodeSnapshot(encodeDelta(baseline, posed).slice().buffer);
+    expect(snapPose.players.map((p) => p.id)).toEqual(['a']);
+    expect(snapPose.players[0]!.pose).toBe(1);
+
+    const b = mkPlayer('b', { role: 'seeker', ammo: 10 });
+    const base2 = captureBaseline(mkWorld([b]));
+    const shot = mkWorld([{ ...b, ammo: 9 }]); // disparó: el delta debe propagarlo
+    const snapShot = decodeSnapshot(encodeDelta(base2, shot).slice().buffer);
+    expect(snapShot.players.map((p) => p.id)).toEqual(['b']);
+    expect(snapShot.players[0]!.ammo).toBe(9);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCamouflage, requiredFixationTicks } from './camouflage';
+import { computeCamouflage } from './camouflage';
 import { ColorRGBA } from './value-objects/ColorRGBA';
 import { DEFAULT_SIM_CONFIG } from './config';
 
@@ -43,16 +43,3 @@ describe('computeCamouflage', () => {
   });
 });
 
-describe('requiredFixationTicks', () => {
-  it('un objetivo totalmente visible (score 0) requiere la fijación mínima', () => {
-    expect(requiredFixationTicks(0, cfg)).toBe(cfg.fixationMinTicks);
-  });
-
-  it('un camuflaje perfecto (score 1) requiere la fijación máxima', () => {
-    expect(requiredFixationTicks(1, cfg)).toBe(cfg.fixationMaxTicks);
-  });
-
-  it('es monótona: más camuflaje ⇒ más tiempo de fijación', () => {
-    expect(requiredFixationTicks(0.25, cfg)).toBeLessThan(requiredFixationTicks(0.75, cfg));
-  });
-});

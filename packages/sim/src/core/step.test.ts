@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { initialWorld, type WorldState } from './entities/WorldState';
 import { PlayerState } from './entities/PlayerState';
+import { DEFAULT_SIM_CONFIG, type SimConfig } from './config';
 import { makeRng } from './rng';
 import { step } from './step';
 import type { MapData } from './map/MapData';
@@ -10,6 +11,8 @@ import { ActionKind, type GamePhase, type UserCommand } from '@shared/protocol';
 const DT = 1 / 30;
 const rng = makeRng(1);
 const physics = new KinematicPhysicsWorld();
+// Modo de munición LIMITADA del original (update 2.3.0): opción del host, no el default.
+const LIMITED_CFG: SimConfig = { ...DEFAULT_SIM_CONFIG, ammoLimitEnabled: true };
 
 /** Color empaquetado 0xRRGGBBAA (alpha 255). */
 function packColor(r: number, g: number, b: number): number {
@@ -26,16 +29,14 @@ function flatMap(packed: number): MapData {
   };
 }
 // El Hider por defecto es BLANCO (biblia: "camaleón blanco puro"). Sobre suelo NEGRO
-// (MAP_VISIBLE) resalta → camoScore 0 → fijación mínima; sobre suelo BLANCO (MAP_CAMO)
-// se funde → camoScore 1 → fijación máxima.
+// (MAP_VISIBLE) resalta (camoScore 0); sobre suelo BLANCO (MAP_CAMO) se funde
+// (camoScore 1). El camuflaje NO modula el disparo: engaña al ojo, no al rayo.
 const MAP_VISIBLE = flatMap(packColor(0, 0, 0));
 const MAP_CAMO = flatMap(packColor(255, 255, 255));
 
-/** Mantiene el gatillo (CATCH) del Seeker apuntando a +x durante `ticks` ticks. */
-function holdCatch(w: WorldState, seekerId: string, ticks: number, map: MapData): void {
-  for (let i = 0; i < ticks; i++) {
-    step(w, [mkCmd(seekerId, { aimX: 1, aimZ: 0, action: ActionKind.CATCH })], DT, rng, physics, map);
-  }
+/** Un tick con DISPARO del Seeker apuntando a +x. */
+function shoot(w: WorldState, seekerId: string, map: MapData): void {
+  step(w, [mkCmd(seekerId, { aimX: 1, aimZ: 0, action: ActionKind.CATCH })], DT, rng, physics, map);
 }
 
 function mkCmd(playerId: string, over: Partial<UserCommand> = {}): UserCommand {
@@ -45,7 +46,9 @@ function mkCmd(playerId: string, over: Partial<UserCommand> = {}): UserCommand {
     moveX: 0,
     moveZ: 0,
     aimX: 0,
+    aimY: 0,
     aimZ: 1,
+    pose: 0,
     action: ActionKind.NONE,
     ...over,
   };
@@ -61,14 +64,17 @@ function worldInPhase(
     frozen?: boolean;
     color?: readonly [number, number, number];
   }>,
+  cfg: SimConfig = DEFAULT_SIM_CONFIG,
 ): WorldState {
-  const w = initialWorld(1);
+  const w = initialWorld(1, cfg);
   w.phase = phase;
   for (const spec of players) {
     const p = new PlayerState(spec.id, spec.role);
     p.pos.setMut(spec.x ?? 0, 0, spec.z ?? 0);
     p.frozen = spec.frozen ?? false;
     if (spec.color) p.color.setMut(spec.color[0], spec.color[1], spec.color[2]);
+    // Como en startGame: los Seekers entran con munición (economía de disparos).
+    if (spec.role === 'seeker') p.ammo = w.config.shotAmmo;
     w.players.set(spec.id, p);
   }
   return w;
@@ -127,66 +133,63 @@ describe('step — movimiento y anti-trampas', () => {
   });
 });
 
-describe('step — captura por fijación (P0.3, híbrido)', () => {
-  it('un objetivo VISIBLE cae casi al instante manteniendo el gatillo', () => {
+describe('step — disparos (modelo del original: tag por impacto)', () => {
+  it('un disparo certero atrapa al Hider AL INSTANTE (pasa a Seeker con munición)', () => {
     const w = worldInPhase('hunt', [
       { id: 's', role: 'seeker', x: 0 },
       { id: 'h', role: 'hider', x: 2, frozen: true },
     ]);
-    holdCatch(w, 's', 3, MAP_VISIBLE); // camoScore 0 → fijación mínima (2)
+    shoot(w, 's', MAP_VISIBLE); // 1 solo disparo
     const h = w.players.get('h')!;
     expect(h.caught).toBe(true);
     expect(h.role).toBe('seeker');
     expect(h.frozen).toBe(false);
+    expect(h.ammo).toBe(w.config.shotAmmo); // el convertido recibe munición
   });
 
-  it('un objetivo bien camuflado y quieto RESISTE una fijación corta', () => {
+  it('el camuflaje perfecto NO protege de un disparo certero (engaña al ojo, no al rayo)', () => {
     const w = worldInPhase('hunt', [
       { id: 's', role: 'seeker', x: 0 },
       { id: 'h', role: 'hider', x: 2, frozen: true },
     ]);
-    holdCatch(w, 's', 10, MAP_CAMO); // camoScore 1 → requiere ~75 ticks
-    expect(w.players.get('h')!.caught).toBe(false);
-  });
-
-  it('el mismo objetivo camuflado SÍ cae si el Seeker sostiene la mira lo suficiente', () => {
-    const w = worldInPhase('hunt', [
-      { id: 's', role: 'seeker', x: 0 },
-      { id: 'h', role: 'hider', x: 2, frozen: true },
-    ]);
-    holdCatch(w, 's', 80, MAP_CAMO); // > fijación máxima (75)
+    shoot(w, 's', MAP_CAMO); // Hider blanco sobre blanco (camo 1): igual cae si le aciertan
     expect(w.players.get('h')!.caught).toBe(true);
   });
 
-  it('soltar el gatillo REINICIA la fijación (hay que sostenerla sin interrupción)', () => {
+  it('por defecto la munición es ILIMITADA: fallar no la gasta (como el juego base)', () => {
     const w = worldInPhase('hunt', [
       { id: 's', role: 'seeker', x: 0 },
-      { id: 'h', role: 'hider', x: 2, frozen: true },
+      { id: 'h', role: 'hider', x: 2, z: 10, frozen: true }, // fuera de la línea de tiro
     ]);
-    holdCatch(w, 's', 40, MAP_CAMO); // acumula, pero < 75
-    step(w, [mkCmd('s', { aimX: 1, aimZ: 0, action: ActionKind.NONE })], DT, rng, physics, MAP_CAMO); // suelta
-    expect(w.players.get('s')!.lockTicks).toBe(0);
-    holdCatch(w, 's', 40, MAP_CAMO); // reempieza de 0 → sigue sin llegar a 75
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('s')!.ammo).toBe(w.config.shotAmmo); // intacta
     expect(w.players.get('h')!.caught).toBe(false);
   });
 
-  it('marca beingWatched en el objetivo mientras el Seeker lo fija, y lo limpia al soltar', () => {
+  it('COOLDOWN: un segundo disparo inmediato se ignora; pasado el cooldown vuelve a tirar', () => {
     const w = worldInPhase('hunt', [
       { id: 's', role: 'seeker', x: 0 },
       { id: 'h', role: 'hider', x: 2, frozen: true },
     ]);
-    holdCatch(w, 's', 5, MAP_CAMO);
-    expect(w.players.get('h')!.beingWatched).toBe(true);
-    step(w, [mkCmd('s', { aimX: 1, aimZ: 0, action: ActionKind.NONE })], DT, rng, physics, MAP_CAMO);
-    expect(w.players.get('h')!.beingWatched).toBe(false);
+    // Aparta al hider de la línea de tiro para el primer disparo (fallo intencional).
+    w.players.get('h')!.pos.setMut(2, 0, 10);
+    shoot(w, 's', MAP_VISIBLE); // dispara (falla) → cooldown activo
+    // Recoloca al hider EN la línea de tiro: el disparo en cooldown NO debe atraparlo.
+    w.players.get('h')!.pos.setMut(2, 0, 0);
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h')!.caught).toBe(false); // dentro del cooldown: no hubo tiro
+    // Pasado el cooldown, vuelve a poder disparar (y ahora sí lo atrapa).
+    for (let i = 0; i < w.config.shotCooldownTicks; i++) step(w, [], DT, rng, physics, MAP_VISIBLE);
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h')!.caught).toBe(true);
   });
 
   it('no atrapa si el Hider está fuera de alcance', () => {
     const w = worldInPhase('hunt', [
       { id: 's', role: 'seeker', x: 0 },
-      { id: 'h', role: 'hider', x: 10, frozen: true }, // > catchRange (3)
+      { id: 'h', role: 'hider', x: 50, frozen: true }, // > catchRange (30, alcance de arma)
     ]);
-    holdCatch(w, 's', 10, MAP_VISIBLE);
+    shoot(w, 's', MAP_VISIBLE);
     expect(w.players.get('h')!.caught).toBe(false);
   });
 
@@ -195,9 +198,7 @@ describe('step — captura por fijación (P0.3, híbrido)', () => {
       { id: 's', role: 'seeker', x: 0 },
       { id: 'h', role: 'hider', x: 2, frozen: true },
     ]);
-    for (let i = 0; i < 10; i++) {
-      step(w, [mkCmd('s', { aimX: -1, aimZ: 0, action: ActionKind.CATCH })], DT, rng, physics, MAP_VISIBLE);
-    }
+    step(w, [mkCmd('s', { aimX: -1, aimZ: 0, action: ActionKind.CATCH })], DT, rng, physics, MAP_VISIBLE);
     expect(w.players.get('h')!.caught).toBe(false);
   });
 
@@ -206,8 +207,61 @@ describe('step — captura por fijación (P0.3, híbrido)', () => {
       { id: 's', role: 'seeker', x: 0 },
       { id: 'h', role: 'hider', x: 2 },
     ]);
-    holdCatch(w, 's', 10, MAP_VISIBLE);
+    shoot(w, 's', MAP_VISIBLE);
     expect(w.players.get('h')!.caught).toBe(false);
+    expect(w.players.get('s')!.ammo).toBe(w.config.shotAmmo); // ni gasta munición
+  });
+});
+
+describe('step — modo de munición LIMITADA (opción del host, como el 2.3.0 del original)', () => {
+  it('FALLAR cuesta 1 bala; ACERTAR es gratis', () => {
+    const w = worldInPhase(
+      'hunt',
+      [
+        { id: 's', role: 'seeker', x: 0 },
+        { id: 'h', role: 'hider', x: 2, z: 10, frozen: true }, // fuera de la línea de tiro
+      ],
+      LIMITED_CFG,
+    );
+    shoot(w, 's', MAP_VISIBLE); // fallo
+    expect(w.players.get('s')!.ammo).toBe(LIMITED_CFG.shotAmmo - 1);
+
+    // Pasado el cooldown, recoloca al hider EN la línea y acierta: no gasta.
+    for (let i = 0; i < w.config.shotCooldownTicks; i++) step(w, [], DT, rng, physics, MAP_VISIBLE);
+    w.players.get('h')!.pos.setMut(2, 0, 0);
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h')!.caught).toBe(true);
+    expect(w.players.get('s')!.ammo).toBe(LIMITED_CFG.shotAmmo - 1); // el acierto fue gratis
+  });
+
+  it('sin munición NO hay disparo', () => {
+    const w = worldInPhase(
+      'hunt',
+      [
+        { id: 's', role: 'seeker', x: 0 },
+        { id: 'h', role: 'hider', x: 2, frozen: true },
+        { id: 's2', role: 'seeker', x: -5 }, // conserva balas: la ronda no termina
+      ],
+      LIMITED_CFG,
+    );
+    w.players.get('s')!.ammo = 0;
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h')!.caught).toBe(false);
+  });
+
+  it('si TODOS los Seekers llegan a 0 balas, los Hiders ganan AL INSTANTE', () => {
+    const w = worldInPhase(
+      'hunt',
+      [
+        { id: 's', role: 'seeker', x: 0 },
+        { id: 'h', role: 'hider', x: 2, z: 10, frozen: true }, // sobrevive lejos
+      ],
+      LIMITED_CFG,
+    );
+    w.players.get('s')!.ammo = 1; // última bala
+    shoot(w, 's', MAP_VISIBLE); // falla → 0 balas en todo el bando Seeker
+    expect(w.phase).toBe('ended');
+    expect(w.outcome).toBe('hiders');
   });
 });
 
@@ -239,11 +293,59 @@ describe('step — camuflaje (P0.2)', () => {
   });
 });
 
-describe('step — FREEZE', () => {
-  it('FREEZE congela la pose del Hider', () => {
+describe('step — sin congelado voluntario (regresión del playtest)', () => {
+  it('la acción FREEZE ya NO congela (era una trampa: bloqueaba WASD/R sin aviso)', () => {
     const w = worldInPhase('prep', [{ id: 'h', role: 'hider' }]);
     step(w, [mkCmd('h', { action: ActionKind.FREEZE })], DT, rng, physics);
-    expect(w.players.get('h')!.frozen).toBe(true);
+    expect(w.players.get('h')!.frozen).toBe(false);
+    // …y sigue pudiendo moverse y cambiar de pose.
+    step(w, [mkCmd('h', { moveX: 1, pose: 2 })], DT, rng, physics);
+    expect(w.players.get('h')!.pos.x).toBeGreaterThan(0);
+    expect(w.players.get('h')!.pose).toBe(2);
+  });
+});
+
+describe('step — poses (V1-B)', () => {
+  it('el Hider adopta la pose del comando en Prep (y se sanea a 0..3)', () => {
+    const w = worldInPhase('prep', [{ id: 'h', role: 'hider' }]);
+    step(w, [mkCmd('h', { pose: 2 })], DT, rng, physics);
+    expect(w.players.get('h')!.pose).toBe(2);
+    step(w, [mkCmd('h', { pose: 255 })], DT, rng, physics); // valor tramposo
+    expect(w.players.get('h')!.pose).toBe(3); // 255 & 3
+  });
+
+  it('la pose queda FIJA durante Hunt (congelado automático)', () => {
+    const w2 = worldInPhase('hunt', [{ id: 'h', role: 'hider', frozen: true }]);
+    step(w2, [mkCmd('h', { pose: 2 })], DT, rng, physics);
+    expect(w2.players.get('h')!.pose).toBe(0); // en Hunt no se cambia
+  });
+
+  it('el Seeker no adopta poses', () => {
+    const w = worldInPhase('prep', [{ id: 's', role: 'seeker' }]);
+    step(w, [mkCmd('s', { pose: 2 })], DT, rng, physics);
+    expect(w.players.get('s')!.pose).toBe(0);
+  });
+});
+
+describe('step — oclusión (V1-A)', () => {
+  it('NO se puede disparar a través de un muro', () => {
+    const wallMap: MapData = {
+      id: 'walled',
+      bounds: { minX: -100, maxX: 100, minY: 0, maxY: 5, minZ: -100, maxZ: 100 },
+      floorColor: packColor(0, 0, 0), // Hider blanco sobre negro: totalmente VISIBLE
+      zones: [
+        { id: 'wall', kind: 'wall', minX: 0.8, maxX: 1.2, minZ: -2, maxZ: 2, y: 1.5, height: 3, color: packColor(0, 0, 0), roughness: 1, metalness: 0 },
+      ],
+      spawns: [],
+    };
+    const w = worldInPhase('hunt', [
+      { id: 's', role: 'seeker', x: 0 },
+      { id: 'h', role: 'hider', x: 2, frozen: true },
+    ]);
+    const walledPhysics = new KinematicPhysicsWorld(16, wallMap);
+    step(w, [mkCmd('s', { aimX: 1, aimZ: 0, action: ActionKind.CATCH })], DT, rng, walledPhysics, wallMap);
+    const h = w.players.get('h')!;
+    expect(h.caught).toBe(false); // el muro corta el disparo aunque esté visible y a 2 m
   });
 });
 
@@ -263,8 +365,7 @@ describe('step — determinismo', () => {
           z: p.pos.z,
           lpi: p.lastProcessedInput,
           camo: p.camoScore,
-          lock: p.lockTicks,
-          watched: p.beingWatched,
+          ammo: p.ammo,
         })),
     };
   }
@@ -277,9 +378,9 @@ describe('step — determinismo', () => {
       ]);
     const a = make();
     const b = make();
-    // El Seeker mantiene el gatillo desde el tick 3; objetivo VISIBLE → cae rápido.
+    // El Seeker dispara en el tick 3; objetivo en la línea de tiro → cae al instante.
     const cmds = (seq: number): UserCommand[] => [
-      mkCmd('s', { seq, aimX: 1, aimZ: 0, action: seq >= 3 ? ActionKind.CATCH : ActionKind.NONE }),
+      mkCmd('s', { seq, aimX: 1, aimZ: 0, action: seq === 3 ? ActionKind.CATCH : ActionKind.NONE }),
     ];
     const rngA = makeRng(7);
     const rngB = makeRng(7);
@@ -290,6 +391,6 @@ describe('step — determinismo', () => {
       step(b, cmds(t), DT, rngB, physB, MAP_VISIBLE);
     }
     expect(serialize(a)).toEqual(serialize(b));
-    expect(a.players.get('h')!.role).toBe('seeker'); // fue atrapado al sostener la mira
+    expect(a.players.get('h')!.role).toBe('seeker'); // cayó con el disparo del tick 3
   });
 });

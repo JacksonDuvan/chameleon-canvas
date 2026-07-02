@@ -22,7 +22,9 @@ export interface UserCommand {
   readonly playerId: string;
   readonly moveX: number; // intención de movimiento -1..1 (el servidor clampa)
   readonly moveZ: number;
-  readonly aimX: number; // dirección de apunte normalizada
+  readonly aimX: number; // dirección de apunte normalizada 3D (mouse-look)
+  readonly aimY: number; // componente vertical (pitch) — el Seeker apunta arriba/abajo
   readonly aimZ: number;
+  readonly pose: number; // pose deseada del Hider 0..3 (el servidor sanea y valida fase/rol)
   readonly action: ActionKind;
 }

@@ -48,11 +48,18 @@ export function Environment() {
         metalness: z.metalness,
       });
       const isFloor = z.kind === 'floor';
+      // Forma visual del prop: caja, cilindro (barriles/jardineras) o esfera (bolas).
+      // La colisión/oclusión del sim usa el AABB — aproximación aceptada.
+      let geometry: THREE.BufferGeometry;
+      if (isFloor) geometry = new THREE.PlaneGeometry(w, d);
+      else if (z.shape === 'cylinder')
+        geometry = new THREE.CylinderGeometry(Math.min(w, d) / 2, Math.min(w, d) / 2, z.height, 14);
+      else if (z.shape === 'sphere')
+        geometry = new THREE.SphereGeometry(Math.min(w, d, z.height) / 2, 14, 12);
+      else geometry = new THREE.BoxGeometry(w, z.height, d);
       return {
         id: z.id,
-        geometry: isFloor
-          ? new THREE.PlaneGeometry(w, d)
-          : new THREE.BoxGeometry(w, z.height, d),
+        geometry,
         material,
         position: [cx, z.y, cz] as [number, number, number],
         isFloor,

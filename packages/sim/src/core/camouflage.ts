@@ -1,13 +1,16 @@
 /**
- * Camuflaje (P0.2/P0.3) — cálculo DETERMINISTA y server-authoritative de "qué tan
- * camuflado está un Hider" y de cuánto debe fijar el Seeker la mira para taggearlo.
+ * Camuflaje (P0.2) — cálculo DETERMINISTA y server-authoritative de "qué tan
+ * camuflado está un Hider". Alimenta la BARRA del HUD (auto-inspección del Hider).
+ *
+ * Tras el playtest de V1 la captura volvió al modelo del ORIGINAL (disparo instantáneo
+ * con munición limitada): el camuflaje ya NO modula la resolución del impacto — engaña
+ * al OJO del Seeker humano (percepción), como en el juego real. Este score queda como
+ * feedback para el Hider. Decisión documentada en docs/07.
  *
  * Vive en `@mecha/sim` porque debe ser idéntico allá donde se calcule (hoy solo el
- * servidor lo consume en `step`; el cliente lo recibe ya calculado en el snapshot). El
- * cliente NUNCA decide si estás oculto (skill `authoritative-netcode`).
+ * servidor lo consume en `step`; el cliente lo recibe ya calculado en el snapshot).
  *
- * Modelo (MVP): parecido de color al entorno + quietud. No mira metallic/roughness (el
- * avatar aún no los guarda; P1). Sin asignaciones.
+ * Modelo (MVP): parecido de color al entorno + quietud. Sin asignaciones.
  */
 import type { ColorRGBA } from './value-objects/ColorRGBA';
 import type { SimConfig } from './config';
@@ -39,17 +42,4 @@ export function computeCamouflage(
   const speedFrac = cfg.maxSpeed > 0 ? clamp01(speed / cfg.maxSpeed) : 0;
   const movement = 1 - speedFrac * cfg.camoMovePenalty;
   return clamp01(colorMatch * movement);
-}
-
-/**
- * Ticks de mira sostenida ("fijación") que un Seeker debe mantener sobre un objetivo con
- * este `camoScore` para confirmar la captura. Objetivo visible (0) → mínimo (casi
- * instantáneo); camuflaje perfecto y quieto (1) → máximo. Interpolación lineal.
- *
- * Es el corazón del modelo HÍBRIDO: el bien camuflado no es inmune, pero exige que el
- * Seeker esté SEGURO (sostenga la mira) — premia la observación sin quitarle el tag.
- */
-export function requiredFixationTicks(camoScore: number, cfg: SimConfig): number {
-  const s = clamp01(camoScore);
-  return Math.round(cfg.fixationMinTicks + (cfg.fixationMaxTicks - cfg.fixationMinTicks) * s);
 }

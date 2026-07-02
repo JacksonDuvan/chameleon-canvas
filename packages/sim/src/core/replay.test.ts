@@ -20,7 +20,7 @@ const FAST_CONFIG = { ...DEFAULT_SIM_CONFIG, prepDurationTicks: 3, huntDurationT
 const IDS = ['p0', 'p1', 'p2', 'p3'];
 const TICKS = 12;
 
-/** Stream guionizado: todos empujan +x, apuntan +x y pulsan CATCH cada tick. */
+/** Stream guionizado: todos empujan +x, apuntan +x, ciclan pose y pulsan CATCH cada tick. */
 function commandsForTick(tick: number): UserCommand[] {
   return IDS.map((playerId) => ({
     seq: tick,
@@ -28,7 +28,9 @@ function commandsForTick(tick: number): UserCommand[] {
     moveX: 1,
     moveZ: 0,
     aimX: 1,
+    aimY: 0,
     aimZ: 0,
+    pose: tick & 3, // ejercita el camino de poses en el replay
     action: ActionKind.CATCH,
   }));
 }
@@ -56,6 +58,7 @@ function serialize(w: WorldState) {
         id: p.id,
         role: p.role,
         caught: p.caught,
+        pose: p.pose,
         x: Number(p.pos.x.toFixed(4)),
         z: Number(p.pos.z.toFixed(4)),
         lpi: p.lastProcessedInput,

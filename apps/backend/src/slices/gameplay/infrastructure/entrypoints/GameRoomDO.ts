@@ -29,6 +29,7 @@ import {
   makeRng,
   removePlayer,
   KinematicPhysicsWorld,
+  DEFAULT_MAP,
   type Rng,
   type IPhysicsWorld,
 } from '@mecha/sim';
@@ -76,7 +77,9 @@ export class GameRoomDO extends DurableObject<Env> {
     super(ctx, env);
     this.live = new SingleRoomRepository();
     this.persist = new DoStorageRoomRepository(ctx.storage);
-    this.physics = new KinematicPhysicsWorld(Number(env.MAX_PLAYERS_PER_ROOM) || 16);
+    // La física conoce los sólidos del mapa (oclusión del rayo de captura, V1-A).
+    // Cuando haya varios mapas, el mapa de la sala vendrá de la config de la sala.
+    this.physics = new KinematicPhysicsWorld(Number(env.MAX_PLAYERS_PER_ROOM) || 16, DEFAULT_MAP);
     this.rng = makeRng(0);
     const monet = new KvMonetizationAdapter(env.MONET_KV);
     this.playerJoin = new PlayerJoin(this.live, monet);

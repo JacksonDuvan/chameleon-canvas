@@ -8,6 +8,7 @@ import { ClientOnly, createFileRoute } from '@tanstack/react-router';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from '@/features/canvas-3d/components/Scene';
 import { useRaycastColor } from '@/features/canvas-3d/hooks/useRaycastColor';
+import { useMouseLook } from '@/features/canvas-3d/hooks/useMouseLook';
 import {
   useGameSockets,
   type GameSockets,
@@ -39,9 +40,12 @@ function Game() {
 
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
-      <Canvas shadows camera={{ position: [0, 12, 16], fov: 55 }}>
+      <Canvas shadows camera={{ position: [0, 12, 16], fov: 60 }}>
+        {/* Fondo + niebla suave: profundidad visual barata (ayuda a leer distancias). */}
+        <color attach="background" args={['#aebfd0']} />
+        <fog attach="fog" args={['#aebfd0', 28, 70]} />
         <Scene />
-        <Cuentagotas sockets={sockets} />
+        <Controles sockets={sockets} />
       </Canvas>
       <Hud
         onStart={() => sockets.sendControl({ type: 'start' })}
@@ -51,8 +55,9 @@ function Game() {
   );
 }
 
-/** Enlaza el cuentagotas DENTRO del Canvas (useThree requiere el contexto de R3F). */
-function Cuentagotas({ sockets }: { sockets: GameSockets }) {
+/** Enlaza cuentagotas + mouse-look DENTRO del Canvas (useThree requiere el contexto R3F). */
+function Controles({ sockets }: { sockets: GameSockets }) {
   useRaycastColor(sockets.sendControl);
+  useMouseLook();
   return null;
 }

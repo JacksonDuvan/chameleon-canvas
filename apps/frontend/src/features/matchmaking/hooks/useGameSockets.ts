@@ -30,7 +30,9 @@ export interface InputIntent {
   readonly moveX: number;
   readonly moveZ: number;
   readonly aimX: number;
+  readonly aimY: number; // pitch del mouse-look (V1-C)
   readonly aimZ: number;
+  readonly pose: number; // pose deseada del Hider (V1-B)
   readonly action: ActionKind;
 }
 
@@ -88,14 +90,15 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   if (!st.localPlayerId) return;
   const now = performance.now();
   const seen = new Set<string>();
+  let confirmedHits = 0; // capturas confirmadas por el servidor en este snapshot
 
   for (const p of snap.players) {
     if (p.id === st.localPlayerId) {
       // Jugador local: reconciliar (re-aplica los inputs no confirmados; sin snap).
       reconcile(st.local, pending, p, snap.phase, DEFAULT_SIM_CONFIG);
-      // Camuflaje/feedback son autoritativos del servidor (no se predicen): cópialos tal cual.
+      // Camuflaje y munición son autoritativos del servidor (no se predicen): cópialos.
       st.local.camoScore = p.camoScore;
-      st.local.beingWatched = p.beingWatched;
+      st.local.ammo = p.ammo;
       continue;
     }
     seen.add(p.id);
@@ -110,17 +113,22 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
         caught: p.caught,
         colorPacked: p.colorPacked,
         camoScore: p.camoScore,
-        beingWatched: p.beingWatched,
+        pose: p.pose,
+        aimX: p.aimX,
+        aimZ: p.aimZ,
       };
       st.remotes.set(p.id, e);
     }
     pushRemoteSnapshot(e.buffer, { tick: snap.tick, recvAt: now, x: p.x, y: p.y, z: p.z });
+    if (p.caught && !e.caught) confirmedHits++; // transición: alguien acaba de caer
     e.role = p.role;
     e.frozen = p.frozen;
     e.caught = p.caught;
     e.colorPacked = p.colorPacked;
     e.camoScore = p.camoScore;
-    e.beingWatched = p.beingWatched;
+    e.pose = p.pose;
+    e.aimX = p.aimX;
+    e.aimZ = p.aimZ;
   }
 
   // Un KEYFRAME es estado completo: elimina remotos ausentes (cambios de roster).
@@ -131,6 +139,10 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   }
 
   st.serverTick = snap.tick; // RÁPIDO: mutación in situ
+  // Hit marker: el servidor confirmó capturas y el local es Seeker (probable autor).
+  if (confirmedHits > 0 && st.local.role === 'seeker') {
+    worldStore.setState({ hitPulse: worldStore.getState().hitPulse + confirmedHits });
+  }
   // LENTO: notifica al HUD. Los selectores reactivos hacen bail-out si el valor no
   // cambió, así que publicar `localRole` cada tick es barato (solo re-renderiza al
   // cambiar de rol, p. ej. cuando un Hider es atrapado y pasa a Seeker).
@@ -159,8 +171,12 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
         worldStore.setState({ connected: true });
       };
       ws.onmessage = (ev: MessageEvent) => {
-        if (typeof ev.data === 'string') handleControlMessage(ev.data);
-        else applySnapshot(decodeSnapshot(ev.data as ArrayBuffer), pendingRef.current);
+        try {
+          if (typeof ev.data === 'string') handleControlMessage(ev.data);
+          else applySnapshot(decodeSnapshot(ev.data as ArrayBuffer), pendingRef.current);
+        } catch {
+          /* frame malformado/truncado: descartarlo; el próximo snapshot re-sincroniza */
+        }
       };
       // RECONEXIÓN con backoff (0.5→4 s): si el socket cae (server reiniciado, sala que
       // renace, red), reintenta solo en vez de quedar "desconectado" para siempre.

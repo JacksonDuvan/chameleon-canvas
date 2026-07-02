@@ -7,6 +7,7 @@ export * from './config';
 export * from './collision';
 export * from './map/MapData';
 export * from './camouflage';
+export * from './pose';
 export * from './rng';
 export * from './movement';
 export * from './phases';

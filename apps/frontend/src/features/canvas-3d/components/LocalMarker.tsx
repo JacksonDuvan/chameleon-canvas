@@ -22,7 +22,11 @@ export function LocalMarker() {
   useFrame((state) => {
     const m = ref.current;
     if (!m) return;
-    const lp = worldStore.getState().local.pos;
+    const st = worldStore.getState();
+    // En primera persona (Seeker en Hunt) el marcador estorbaría sobre la cámara.
+    m.visible = !(st.local.role === 'seeker' && st.phase === 'hunt');
+    if (!m.visible) return;
+    const lp = st.local.pos;
     const bob = Math.sin(state.clock.elapsedTime * 3) * 0.08;
     m.position.set(lp.x, lp.y + 2.3 + bob, lp.z);
     m.rotation.y = state.clock.elapsedTime * 1.5;

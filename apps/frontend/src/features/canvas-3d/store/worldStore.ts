@@ -32,8 +32,10 @@ export interface RemoteEntity {
   frozen: boolean;
   caught: boolean;
   colorPacked: number;
-  camoScore: number; // 0..1 (P0.2)
-  beingWatched: boolean; // un Seeker lo está fijando (P0.3)
+  camoScore: number; // 0..1 (P0.2; útil para la pantalla de results)
+  pose: number; // pose del avatar 0..3 (V1-B)
+  aimX: number; // apunte horizontal (para orientar el avatar remoto)
+  aimZ: number;
 }
 
 export interface WorldStoreState {
@@ -50,6 +52,8 @@ export interface WorldStoreState {
   isHost: boolean; // solo el host puede iniciar la ronda
   localRole: PlayerRole; // rol del jugador local (para el HUD: Hider/Seeker)
   lastError: string | null; // último error de control del servidor (p. ej. NotHost)
+  pointerLocked: boolean; // ¿el canvas tiene el ratón capturado? (hint del HUD, V1-C)
+  hitPulse: number; // contador: sube cuando el servidor confirma una captura (hit marker)
 }
 
 export const worldStore = createStore<WorldStoreState>(() => ({
@@ -63,4 +67,6 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   isHost: false,
   localRole: 'hider',
   lastError: null,
+  pointerLocked: false,
+  hitPulse: 0,
 }));

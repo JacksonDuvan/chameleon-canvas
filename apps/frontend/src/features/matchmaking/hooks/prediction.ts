@@ -11,7 +11,14 @@
  * Se extrae a funciones puras (no a `useFrame`/React) para poder testearlas —
  * skill `tdd-testing` (el test de reconciliación es de los más valiosos).
  */
-import { applyAim, applyMovement, canMove, type PlayerState, type SimConfig } from '@mecha/sim';
+import {
+  applyAim,
+  applyMovement,
+  canMove,
+  clampPose,
+  type PlayerState,
+  type SimConfig,
+} from '@mecha/sim';
 import type { GamePhase, UserCommand } from '@mecha/shared';
 
 export interface PendingInput {
@@ -27,10 +34,12 @@ export interface AuthoritativeLocal {
   readonly y: number;
   readonly z: number;
   readonly aimX: number;
+  readonly aimY: number;
   readonly aimZ: number;
   readonly role: PlayerState['role'];
   readonly frozen: boolean;
   readonly caught: boolean;
+  readonly pose: number;
 }
 
 /** Predice un input sobre el jugador local (mismas funciones que el servidor). */
@@ -42,6 +51,10 @@ export function predict(
 ): void {
   applyAim(local, input.cmd);
   if (canMove(phase, local)) applyMovement(local, input.cmd, cfg, input.dt);
+  // Pose: MISMA regla de validación que el servidor (step.ts) para converger.
+  if (local.role === 'hider' && !local.frozen && phase === 'prep') {
+    local.pose = clampPose(input.cmd.pose);
+  }
 }
 
 /**
@@ -64,10 +77,12 @@ export function reconcile(
   // 1) Confía en el servidor: resetea el estado local al autoritativo.
   local.pos.setMut(auth.x, auth.y, auth.z);
   local.aimX = auth.aimX;
+  local.aimY = auth.aimY;
   local.aimZ = auth.aimZ;
   local.role = auth.role;
   local.frozen = auth.frozen;
   local.caught = auth.caught;
+  local.pose = auth.pose;
   local.lastProcessedInput = auth.lastProcessedInput;
 
   // 2) Descarta los inputs que el servidor ya contabilizó.
