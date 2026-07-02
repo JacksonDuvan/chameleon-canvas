@@ -115,7 +115,20 @@ de este repo al implementarlo/ampliarlo:
   referencia *del dato del mapa* (autoridad) son **dos cosas distintas**: la primera
   vive en el cliente (three.js), la segunda en el sim (sin three.js).
 
-### Decisión de diseño TOMADA: camuflaje híbrido por tiempo de fijación
+### Decisión de diseño (v2, 2026-07-01): DISPAROS del original — la fijación queda SUPERSEDIDA
+
+> **Actualización post-playtest (Paso 7.5):** al probar V1 con el núcleo de esconderse ya
+> construido (oclusión + poses + FPP), el usuario pidió volver al modelo del ORIGINAL:
+> **click = disparo instantáneo, tag por impacto** (+ cooldown anti-spray; el servidor
+> resuelve). **Munición: ilimitada por defecto** (juego base) y **modo limitado opcional**
+> fiel al update 2.3.0 del original: fallar cuesta 1, acertar es gratis, todos-a-cero ⇒
+> ganan los Hiders (`ammoLimitEnabled`, futura opción del host). El camuflaje vuelve a ser
+> **percepción del Seeker humano** (biblia literal) — el `camoScore` queda como barra de
+> auto-inspección del Hider. La fijación fue un puente válido mientras no existía forma
+> real de esconderse; con cobertura/poses/FPP ya no hace falta. Wire v4 (`ammo` en el
+> snapshot; fuera `beingWatched`/`lockProgress`). Lo de abajo se conserva como historia.
+
+### Decisión anterior (superseded): camuflaje híbrido por tiempo de fijación
 
 Había una **tensión** entre dos autoridades del repo sobre qué significa "camuflaje":
 

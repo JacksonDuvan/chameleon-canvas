@@ -57,20 +57,21 @@ Orden sugerido de ejecución entre paréntesis. `✅`=hecho · `🟡`=parcial ·
 
 | # | Épica V1 | Estado | Por qué es V1 |
 |---|---|---|---|
-| **V1-A** | **Escenario "escondible"**: props densos + occlusión + colores variados (amplía el mapa compartido de `@mecha/sim`) | ❌ (1) | El corazón. Sin cobertura no hay dónde esconderse. |
-| **V1-B** | **Poses + rotación** (P1.1): de pie/agachado/bola/plano-pared; rota para encajar | ❌ (1) | Romper silueta = esconderse de verdad. |
-| **V1-C** | **Seeker FPP + mouse-look**: 1ª persona, apuntar con el ratón, retícula | ❌ (1) | La caza necesita mirar/escanear/apuntar. |
-| **V1-D** | Camuflaje + detección por **fijación** (P0.2/P0.3) | ✅ | Ya hecho; re-balancear con el escenario nuevo. |
+| **V1-A** | **Escenario "escondible"**: props densos + occlusión + colores variados (amplía el mapa compartido de `@mecha/sim`) | ✅ ([`docs/10`](10-step-7-hiding-core.md)) | El corazón. Sin cobertura no hay dónde esconderse. |
+| **V1-B** | **Poses + rotación** (P1.1): de pie/agachado/bola/plano-pared; rota para encajar | ✅ ([`docs/10`](10-step-7-hiding-core.md)) | Romper silueta = esconderse de verdad. |
+| **V1-C** | **Seeker FPP + mouse-look**: 1ª persona, apuntar con el ratón, retícula | ✅ ([`docs/10`](10-step-7-hiding-core.md)) | La caza necesita mirar/escanear/apuntar. |
+| **V1-D** | Camuflaje (barra) + caza por **disparos del original** (ilimitados por defecto; modo limitado 2.3.0 como opción; sustituyó a la fijación tras el playtest, ver [`docs/10`](10-step-7-hiding-core.md) §7.5) | ✅ | Hecho; seguir balanceando jugando (cooldown/alcance). |
 | **V1-E** | **Matchmaking**: crear/unirse por código + nombre (P2.1, cierra Hono RPC) | ❌ (3) | Para jugar con gente / lanzar al público. |
 | **V1-F** | **Bucle + resultados/reveal** (P1.3): pantalla de fin que **revela** dónde se escondió cada uno; feedback de roles | 🟡 (2) | El *payoff* divertido ("answer-check"). |
 | **V1-G** | **Pass visual estilizado**: cielo, luz, sombras suaves, personaje con silueta decente, HUD con botones/timer/placas de nombre | ❌ (4) | Que parezca un juego, no una escena de debug. Ver §5. |
 | **V1-H** | **Audio mínimo**: SFX de captura + ambiente (silbido/whistling opcional, P2.2) | ❌ (5) | "Juice" barato que sube mucho la diversión. |
 | **V1-I** | **Deploy a producción** (P4.3): `wrangler deploy` back+front en el edge | ❌ (6) | Para que sea público y jugable **sin instalar nada**. |
 
-**Ruta recomendada:** el "núcleo de esconderse" **V1-A + V1-B + V1-C** primero (están
-acoplados y son el juego), re-balancear **V1-D**, luego **V1-F** (payoff), **V1-E** (salas),
-**V1-G** (visual), **V1-H** (audio) y **V1-I** (deploy). Verificación jugable en navegador
-tras cada uno (no al final).
+**Ruta recomendada:** ~~el "núcleo de esconderse" **V1-A + V1-B + V1-C** primero~~ ✅
+**hecho (Paso 7, [`docs/10`](10-step-7-hiding-core.md))** — probar/re-balancear **V1-D**
+jugando, luego **V1-F** (payoff de results/reveal), **V1-E** (salas), **V1-G** (visual),
+**V1-H** (audio) y **V1-I** (deploy). Verificación jugable en navegador tras cada uno
+(no al final).
 
 ## 5. Objetivo visual de V1 (respuesta a "¿se puede como las imágenes 2–3?")
 
@@ -124,6 +125,7 @@ El V1 coincide con el **MVP** que define la skill (Normal mode; pintura por regi
 Spoid; poses básicas; Seeker FPP + tag; máquina de estados con temporizadores; 1–2 mapas;
 results con reveal; lobby público/privado). Diferencias conscientes y documentadas:
 
-- **Caza por fijación** (híbrido) en vez de economía de disparos — ver [`docs/07`](07-librerias-cliente-3d.md).
-  La munición/disparos limitados queda como *tuning* opcional de V1.
+- ~~Caza por fijación (híbrido)~~ → **caza por DISPAROS con munición limitada, como el
+  original** (decidido en el playtest del Paso 7.5; ver [`docs/07`](07-librerias-cliente-3d.md)).
+  Ya no hay desviación aquí: alineados con la biblia.
 - Un Hider atrapado **pasa a Seeker** (infección) ya está implementado; V1 = Normal/Infección.

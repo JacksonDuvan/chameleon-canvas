@@ -49,13 +49,13 @@ Sólido y verificado con tests:
 |---|---|---|
 | Flujo 3 fases Lobby→Prep→Hunt (+Ended) | ✅ | — |
 | Camuflaje: cuentagotas 'E' absorbe color del entorno y pinta el avatar | ✅ (P0.2) | **score de camuflaje + barra HUD hechos**; falta textura/patrón (no solo color plano) |
-| **Detección por camuflaje** (el Seeker no ve al que se funde bien) | ✅ (P0.3) | resuelto vía **fijación híbrida** (el camuflaje alarga el tiempo de mira necesario). Ver `docs/07` |
+| **Detección por camuflaje** (el Seeker no ve al que se funde bien) | ✅ | **percepción real** (como el original): oclusión + poses + FPP; el Seeker **dispara** (munición limitada). Ver `docs/10` §7.5 |
 | Poses + rotación del avatar para encajar en esquinas | ❌ | solo existe "congelar" (FREEZE); faltan poses múltiples y rotación |
 | Match de sombras (la sombra delata) | ❌ | lógica de sombra como factor de detección |
 | Whistling (pista sonora periódica, opción del host) | ❌ | flag `whistling` existe en config; sin implementación ni audio |
 | Hider atrapado → Seeker | ✅ lógica | falta **feedback visual** de captura y balance |
 | Hiders ganan si sobrevive ≥1 | ✅ | — |
-| Captura por interacción del Seeker ('F') | ✅ (P0.3) | ahora **consulta el camuflaje** (fijación por tiempo, F mantenido) + feedback `beingWatched`/captura |
+| Captura por interacción del Seeker | ✅ | **disparo del original** (click/F = 1 tiro, munición limitada + cooldown, oclusión real); feedback de captura + contador de munición |
 | Escenario con materiales/colores/texturas llamativas (ladrillo, madera) | ✅ (P0.1) | **mapa compartido** `@mecha/sim/core/map` (≥4 superficies, `referenceColorAt`); faltan texturas/props ricos y `.glb` (P4.1) |
 | Durable Objects (coordinación WS stateful) | ✅ | — |
 | Monetización: puertos + mocks (ads, tienda R2, Premium) | 🟡 parcial | puerto+entitlement listos; falta **todo el frontend** y SDKs |
@@ -117,7 +117,7 @@ Sólido y verificado con tests:
 
 ## P1 · Mecánicas distintivas del original
 
-### P1.1 · Poses + rotación del avatar — **M**
+### P1.1 · Poses + rotación del avatar — **M** — ✅ HECHO (V1-B, ver `docs/10`)
 - **Objetivo:** el Hider puede rotar y elegir entre varias poses para encajar en
   esquinas/contra props.
 - **Alcance:** extender el `UserCommand`/wire con pose+yaw (cuidando el formato binario);
@@ -229,9 +229,9 @@ Sólido y verificado con tests:
 4. **Camino caliente sin asignaciones**; estado rápido fuera de React.
 5. Cada épica termina con `pnpm test` + `test:do` + `typecheck` + `lint` en verde y un commit.
 
-> **P0 núcleo jugable: ✅ COMPLETO** (P0.1 escenario compartido · P0.2 camuflaje+barra ·
-> P0.3 detección por fijación híbrida). Ver [`docs/08`](08-step-6-camouflage-core.md).
-> **Siguiente = el "núcleo de esconderse" de V1** (ver [`docs/09`](09-v1-scope.md)):
-> **V1-A escenario escondible (props/cobertura) + V1-B poses/rotación + V1-C Seeker en 1ª
-> persona con mouse-look** — están acoplados y son lo que convierte el camuflaje (ya hecho)
-> en esconderse de verdad. Luego results/reveal, matchmaking, pass visual, audio y deploy.
+> **P0 núcleo jugable: ✅ COMPLETO** ([`docs/08`](08-step-6-camouflage-core.md)) ·
+> **Núcleo de esconderse de V1 (V1-A/B/C): ✅ COMPLETO** ([`docs/10`](10-step-7-hiding-core.md))
+> — oclusión+colisión del escenario, poses con hitbox propio y Seeker FPP con mouse-look.
+> **Siguiente** (ver [`docs/09`](09-v1-scope.md)): probar/re-balancear jugando (V1-D),
+> **V1-F results/reveal**, **V1-E matchmaking por código**, pass visual (V1-G), audio
+> (V1-H) y deploy al edge (V1-I).

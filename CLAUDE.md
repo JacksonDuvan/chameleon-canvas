@@ -157,20 +157,20 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/07-librerias-cliente-3d.md`](docs/07-librerias-cliente-3d.md) — **referencia**: librerías del cliente 3D (drei ✅ ya instalada; por qué **NO** `@react-three/rapier`/`cannon`) y el patrón Spoid/camuflaje por raycast (presentación en el cliente vs. autoridad del servidor). Incluye la **decisión** del camuflaje híbrido por fijación.
 - [`docs/08-step-6-camouflage-core.md`](docs/08-step-6-camouflage-core.md) — **núcleo jugable P0**: escenario compartido (`@mecha/sim/core/map`), score de camuflaje determinista + barra HUD, y detección del Seeker por **fijación** (wire v2). Cierra P0.1→P0.3.
 - [`docs/09-v1-scope.md`](docs/09-v1-scope.md) — **🎯 CHARTER DE V1 (objetivo de lanzamiento)**: qué se lanza (clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**, pero **esconderse REAL innegociable**). Es el filtro de "¿en qué trabajo?". Léelo antes de elegir tarea.
+- [`docs/10-step-7-hiding-core.md`](docs/10-step-7-hiding-core.md) — **núcleo de esconderse de V1 (V1-A/B/C)**: oclusión + colisión del escenario (mapa denso con cobertura), poses con hitbox propio, Seeker FPP con mouse-look (wire v3: aimY+pose+lockProgress).
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
-ciclo jugable + claridad + robustez de salas · **Paso 6 ✅ núcleo jugable de camuflaje
-(P0.1→P0.3: escenario compartido, `camoScore`, detección por fijación) — ver `docs/08`**.
-**El núcleo P0 de *Meccha Chameleon* (camuflaje que importa + detección) ya está**, PERO
-aún no se puede *esconder de verdad* (escenario plano/abierto, avatar cápsula). **El
+ciclo jugable + claridad + robustez de salas · Paso 6 ✅ núcleo de camuflaje (P0.1→P0.3,
+`docs/08`) · **Paso 7 ✅ núcleo de esconderse de V1 (V1-A/B/C: oclusión+colisión, poses
+con hitbox, Seeker FPP mouse-look; wire v3) — ver `docs/10`**.
+**Ya se puede esconder de verdad** (cobertura real + poses + caza en 1ª persona). **El
 objetivo es lanzar una V1**: clon *lite* web jugable/divertido/fiel, gráficos low-poly
-estilizados **secundarios**, con **esconderse REAL innegociable**. El corte y la
-"definición de done" de V1 están en **[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (el
-backlog completo, en [`docs/06`](docs/06-roadmap.md)).
-**Siguiente = núcleo de esconderse de V1:** escenario escondible (props/cobertura) +
-poses/rotación + **Seeker en 1ª persona con mouse-look** (acoplados). Luego results/reveal,
-matchmaking por código, pass visual, audio y deploy al edge. Al continuar en otra sesión:
-lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la skill relevante.
+estilizados **secundarios**. El corte y la "definición de done" de V1 están en
+**[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (backlog completo en [`docs/06`](docs/06-roadmap.md)).
+**Siguiente:** probar/re-balancear jugando (V1-D) · **V1-F results/reveal** · **V1-E
+matchmaking por código** · pass visual (V1-G) · audio (V1-H) · deploy (V1-I). Al continuar
+en otra sesión: lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la
+skill relevante.
 
 **Comandos de test:** `pnpm test` (node: shared/sim/backend) · `pnpm --filter @mecha/backend test:do` (DO en workerd) · `pnpm typecheck` · `pnpm lint`.
