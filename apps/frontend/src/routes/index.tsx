@@ -44,7 +44,7 @@ function Game() {
         {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.
             El fondo hace de fallback si el cielo aún no se pintó. */}
         <color attach="background" args={['#cfdce8']} />
-        <fog attach="fog" args={['#cfdce8', 32, 110]} />
+        <fog attach="fog" args={['#cfdce8', 40, 130]} />
         <Scene />
         <Controles sockets={sockets} />
       </Canvas>

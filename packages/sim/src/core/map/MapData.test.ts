@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_MAP, referenceColorAt, type MapData } from './MapData';
+import { DEFAULT_MAP, isSolidZone, referenceColorAt, type MapData } from './MapData';
 import { ColorRGBA } from '../value-objects/ColorRGBA';
+import { DEFAULT_SIM_CONFIG } from '../config';
+import { initialWorld } from '../entities/WorldState';
+import { spawnPlayer } from '../phases';
 
 /** Empaqueta 0..255 a 0xRRGGBBAA (alpha 255), como los colores de zona. */
 function pack(r: number, g: number, b: number): number {
@@ -94,5 +97,59 @@ describe('DEFAULT_MAP', () => {
         expect(out.a).toBe(255);
       }
     }
+  });
+});
+
+describe('DEFAULT_MAP v2 — pueblo (feedback del playtest: mapa grande + mimetismo)', () => {
+  it('los límites del mapa y los de SimConfig son EL MISMO volumen (una sola verdad)', () => {
+    // `movement.applyMovement` clampa con cfg.bounds pero colisiona con map.zones:
+    // si divergen, hay franjas donde una autoridad existe y la otra no.
+    expect(DEFAULT_MAP.bounds).toEqual(DEFAULT_SIM_CONFIG.bounds);
+  });
+
+  it('es un mapa grande (≥ 44 m de lado): pueblo, no habitación', () => {
+    const b = DEFAULT_MAP.bounds;
+    expect(b.maxX - b.minX).toBeGreaterThanOrEqual(44);
+    expect(b.maxZ - b.minZ).toBeGreaterThanOrEqual(44);
+  });
+
+  it('TODA la rejilla de spawn queda libre de sólidos (nadie nace dentro de una casa)', () => {
+    const world = initialWorld();
+    const r = DEFAULT_SIM_CONFIG.playerRadius;
+    for (let i = 0; i < 25; i++) {
+      const p = spawnPlayer(world, `p${i}`);
+      for (const z of DEFAULT_MAP.zones) {
+        if (!isSolidZone(z)) continue;
+        const inside =
+          p.pos.x > z.minX - r &&
+          p.pos.x < z.maxX + r &&
+          p.pos.z > z.minZ - r &&
+          p.pos.z < z.maxZ + r;
+        expect(inside, `spawn ${i} (${p.pos.x},${p.pos.z}) pisa ${z.id}`).toBe(false);
+      }
+    }
+  });
+
+  it('tiene señuelos con forma de muñeco: ≥6 "figure" de pie y ≥4 "figureWall" en muros', () => {
+    // El pilar del mimetismo del original (cactus con brazos, galletas en las paredes):
+    // un Hider pintado y posado JUNTO a un señuelo debe ser indistinguible.
+    const figures = DEFAULT_MAP.zones.filter((z) => z.shape === 'figure');
+    const wallFigures = DEFAULT_MAP.zones.filter((z) => z.shape === 'figureWall');
+    expect(figures.length).toBeGreaterThanOrEqual(6);
+    expect(wallFigures.length).toBeGreaterThanOrEqual(4);
+    // Los señuelos son sólidos: ocluyen el rayo (dispararle a una estatua = fallo).
+    for (const z of [...figures, ...wallFigures]) expect(isSolidZone(z)).toBe(true);
+  });
+
+  it('ofrece variedad real de superficies: ≥8 colores distintos', () => {
+    const colors = new Set<number>([DEFAULT_MAP.floorColor]);
+    for (const z of DEFAULT_MAP.zones) colors.add(z.color);
+    expect(colors.size).toBeGreaterThanOrEqual(8);
+  });
+
+  it('también hay formas que emparejan con las otras poses: bolas y cilindros', () => {
+    const shapes = new Set(DEFAULT_MAP.zones.map((z) => z.shape ?? 'box'));
+    expect(shapes.has('sphere')).toBe(true);
+    expect(shapes.has('cylinder')).toBe(true);
   });
 });

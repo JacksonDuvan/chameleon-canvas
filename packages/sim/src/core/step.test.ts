@@ -127,8 +127,11 @@ describe('step — movimiento y anti-trampas', () => {
 
   it('clampa la posición a los límites del escenario', () => {
     const w = worldInPhase('prep', [{ id: 'h', role: 'hider', x: 19.9 }]);
-    // empuja repetidamente contra el borde +x (max 20)
-    for (let i = 0; i < 100; i++) step(w, [mkCmd('h', { moveX: 1 })], DT, rng, physics);
+    // Mapa ABIERTO (sin muros): aísla el clamp anti-trampas de la colisión — en el
+    // mapa real el muro perimetral frena antes de llegar al límite duro.
+    const openMap: MapData = { id: 'open', bounds: w.config.bounds, floorColor: 0xff, zones: [], spawns: [] };
+    // empuja repetidamente contra el borde +x
+    for (let i = 0; i < 100; i++) step(w, [mkCmd('h', { moveX: 1 })], DT, rng, physics, openMap);
     expect(w.players.get('h')!.pos.x).toBe(w.config.bounds.maxX);
   });
 });

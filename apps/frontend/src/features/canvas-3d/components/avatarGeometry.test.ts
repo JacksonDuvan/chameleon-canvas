@@ -12,7 +12,7 @@
  *     del mapa (mimetismo de objeto, biblia `mecha-chameleon-gamedesign`).
  */
 import { describe, expect, it } from 'vitest';
-import { POSE_BALL, POSE_BODY_CY, POSE_BODY_R, POSE_COUNT, POSE_CROUCH, POSE_STAND } from '@mecha/sim';
+import { POSE_BALL, POSE_BODY_CY, POSE_BODY_R, POSE_COUNT, POSE_CROUCH, POSE_FLAT } from '@mecha/sim';
 import { buildPoseGeometries, VISUAL_FRINGE } from './avatarGeometry';
 
 describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
@@ -65,12 +65,18 @@ describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
     }
   });
 
-  it('de pie y agachado miran a +Z local (la cabeza sigue al yaw)', () => {
-    for (const p of [POSE_STAND, POSE_CROUCH]) {
-      const g = geometries[p]!;
-      g.computeBoundingBox();
-      expect(g.boundingBox!.max.z, `pose ${p}`).toBeGreaterThanOrEqual(0.3);
-    }
+  it('el arrodillado tiene sesgo frontal a +Z local (rodillas siguen al yaw)', () => {
+    // El muñeco de pie es simétrico y sin cara (como el original): no exige frente.
+    const g = geometries[POSE_CROUCH]!;
+    g.computeBoundingBox();
+    expect(g.boundingBox!.max.z).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('la pose plano es DELGADA en Z (se funde con los muñecos de fachada del mapa)', () => {
+    const g = geometries[POSE_FLAT]!;
+    g.computeBoundingBox();
+    const bb = g.boundingBox!;
+    expect(Math.max(Math.abs(bb.min.z), Math.abs(bb.max.z))).toBeLessThanOrEqual(0.3);
   });
 
   it('la pose bola es casi esférica (se funde con las bolas decorativas del mapa)', () => {

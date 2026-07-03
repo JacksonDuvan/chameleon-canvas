@@ -18,7 +18,7 @@ import { lookState } from '../hooks/useMouseLook';
 const EYE_HEIGHT = 1.5; // = SimConfig.eyeHeight (origen del rayo de captura)
 const TP_DIST = 5.5; // distancia de la cámara en tercera persona
 const TP_HEIGHT = 3.0;
-const OVERVIEW = new THREE.Vector3(0, 12, 12); // vista aérea (lobby/ended)
+const OVERVIEW = new THREE.Vector3(0, 15, 14); // vista aérea (lobby/ended; pueblo 48×48)
 const FOV_FPP = 75; // primera persona (Seeker en Hunt): campo amplio para escanear
 const FOV_TP = 60; // tercera persona / vistas generales
 

@@ -17,8 +17,12 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Sky, SoftShadows } from '@react-three/drei';
-import { DEFAULT_MAP } from '@mecha/sim';
-import { LOWPOLY_SPHERE_W, LOWPOLY_SPHERE_H } from './avatarGeometry';
+import { DEFAULT_MAP, POSE_FLAT, POSE_STAND } from '@mecha/sim';
+import { buildPoseGeometries, SPHERE_SEGS_W, SPHERE_SEGS_H } from './avatarGeometry';
+
+/** Roughness de los avatares (`MechaMesh`): los señuelos-muñeco y las bolas lo COMPARTEN
+ *  para que un jugador pintado junto a ellos no se delate por el brillo. */
+const AVATAR_ROUGHNESS = 0.8;
 
 /** Dirección del sol: compartida por el cielo y la luz direccional (sombras coherentes). */
 const SUN_POSITION: [number, number, number] = [14, 20, 8];
@@ -33,6 +37,7 @@ interface BuiltZone {
   readonly geometry: THREE.BufferGeometry;
   readonly material: THREE.Material;
   readonly position: [number, number, number];
+  readonly rotationY: number;
   readonly isFloor: boolean;
   readonly refColor: number;
 }
@@ -66,30 +71,43 @@ export function Environment() {
       color: toColor(DEFAULT_MAP.floorColor),
       roughness: 1,
     });
+    // Geometrías del avatar COMPARTIDAS con los señuelos del mapa: 'figure' = pose de
+    // pie, 'figureWall' = pose plana (galleta). Mismo muñeco ⇒ mimetismo real.
+    const poseGeos = buildPoseGeometries();
+    const figureGeo = poseGeos[POSE_STAND]!;
+    const cookieGeo = poseGeos[POSE_FLAT]!;
     const built: BuiltZone[] = DEFAULT_MAP.zones.map((z) => {
       const w = z.maxX - z.minX;
       const d = z.maxZ - z.minZ;
       const cx = (z.minX + z.maxX) / 2;
       const cz = (z.minZ + z.maxZ) / 2;
       const isFloor = z.kind === 'floor';
+      const isFigure = z.shape === 'figure' || z.shape === 'figureWall';
+      const isMimic = isFigure || z.shape === 'sphere';
       const material = new THREE.MeshStandardMaterial({
         color: toColor(z.color),
-        roughness: z.roughness,
-        metalness: z.metalness,
-        flatShading: !isFloor, // el facetado low-poly solo aporta en volúmenes
+        // Los señuelos que imitan poses copian el ACABADO del avatar (liso, mismo
+        // roughness): que no se delate nadie por el brillo ni el facetado.
+        roughness: isMimic ? AVATAR_ROUGHNESS : z.roughness,
+        metalness: isMimic ? 0 : z.metalness,
+        flatShading: !isFloor && !isMimic, // el facetado solo en la arquitectura
       });
-      // Forma visual del prop: caja biselada, cilindro (barriles/jardineras) o esfera
-      // (bolas — MISMA teselación que la pose "bola": nada delata al que la imita).
+      // Forma visual del prop: caja biselada, cilindro, esfera (MISMA teselación que
+      // la pose "bola") o muñeco-señuelo (geometría del avatar, pies en y=0).
       // La colisión/oclusión del sim usa el AABB — aproximación aceptada.
       let geometry: THREE.BufferGeometry;
+      let position: [number, number, number] = [cx, z.y, cz];
       if (isFloor) geometry = new THREE.PlaneGeometry(w, d);
-      else if (z.shape === 'cylinder')
+      else if (z.shape === 'figure' || z.shape === 'figureWall') {
+        geometry = z.shape === 'figure' ? figureGeo : cookieGeo;
+        position = [cx, z.y - z.height / 2, cz]; // pies del muñeco en la base de la zona
+      } else if (z.shape === 'cylinder')
         geometry = new THREE.CylinderGeometry(Math.min(w, d) / 2, Math.min(w, d) / 2, z.height, 12);
       else if (z.shape === 'sphere')
         geometry = new THREE.SphereGeometry(
           Math.min(w, d, z.height) / 2,
-          LOWPOLY_SPHERE_W,
-          LOWPOLY_SPHERE_H,
+          SPHERE_SEGS_W,
+          SPHERE_SEGS_H,
         );
       else if (z.kind === 'prop')
         geometry = new RoundedBoxGeometry(w, z.height, d, 2, Math.min(0.07, Math.min(w, z.height, d) * 0.15));
@@ -98,7 +116,8 @@ export function Environment() {
         id: z.id,
         geometry,
         material,
-        position: [cx, z.y, cz] as [number, number, number],
+        position,
+        rotationY: ((z.rot ?? 0) * Math.PI) / 2,
         isFloor,
         refColor: z.color,
       };
@@ -131,12 +150,12 @@ export function Environment() {
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-left={-26}
-        shadow-camera-right={26}
-        shadow-camera-top={26}
-        shadow-camera-bottom={-26}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
         shadow-camera-near={4}
-        shadow-camera-far={60}
+        shadow-camera-far={75}
         shadow-bias={-0.0004}
         shadow-normalBias={0.05}
       />
@@ -184,6 +203,7 @@ export function Environment() {
             geometry={z.geometry}
             material={z.material}
             position={z.position}
+            rotation-y={z.rotationY}
             castShadow
             receiveShadow
             userData={{ refColor: z.refColor }}

@@ -80,7 +80,12 @@ export function ShotTracers() {
       _raycaster.set(camera.position, _dir);
       _raycaster.far = MAX_LEN;
       const hits = _raycaster.intersectObjects(scene.children, true);
-      const hit = hits.find((h) => !(h.object.userData?.isTracer as boolean | undefined));
+      // Ni otros trazadores NI lo pegado a la cámara (arma/marcador: noSample).
+      const hit = hits.find(
+        (h) =>
+          !(h.object.userData?.isTracer as boolean | undefined) &&
+          !(h.object.userData?.noSample as boolean | undefined),
+      );
       // Longitud desde el ARRANQUE del trazador (0.4 tras la cámara): si el obstáculo
       // está a quemarropa (antes del arranque), no se dibuja trazador (el tiro existe).
       const len = Math.min(hit ? hit.distance : MAX_LEN, MAX_LEN) - 0.45;

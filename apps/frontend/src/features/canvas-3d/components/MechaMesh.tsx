@@ -31,11 +31,10 @@ export function Players() {
   const refs = useRef<Array<THREE.InstancedMesh | null>>([null, null, null, null]);
 
   // Geometrías con los pies en y=0 (contrato de avatarGeometry: sin offset por pose).
+  // Material LISO con el MISMO roughness que los señuelos del mapa (AVATAR_ROUGHNESS):
+  // un jugador pintado junto a una estatua no debe delatarse por el brillo.
   const geometries = useMemo(() => buildPoseGeometries(), []);
-  const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }),
-    [],
-  );
+  const material = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.8 }), []);
 
   useFrame(() => {
     const meshes = refs.current;

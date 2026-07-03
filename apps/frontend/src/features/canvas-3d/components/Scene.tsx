@@ -8,6 +8,7 @@ import { Players } from './MechaMesh';
 import { CameraRig } from './CameraRig';
 import { LocalMarker } from './LocalMarker';
 import { ShotTracers } from './ShotTracers';
+import { SeekerViewmodel } from './SeekerViewmodel';
 
 export function Scene() {
   return (
@@ -17,6 +18,7 @@ export function Scene() {
       <Players />
       <LocalMarker />
       <ShotTracers />
+      <SeekerViewmodel />
     </>
   );
 }
