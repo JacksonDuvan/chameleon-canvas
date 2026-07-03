@@ -16,6 +16,7 @@ import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { lookState } from '../hooks/useMouseLook';
 import { sampleLocalMut } from '../hooks/interpolation';
+import { revealIndexAt } from '../hooks/reveal';
 
 const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
 
@@ -25,6 +26,8 @@ const TP_HEIGHT = 3.0;
 const OVERVIEW = new THREE.Vector3(0, 15, 14); // vista aérea (lobby/ended; pueblo 48×48)
 const FOV_FPP = 75; // primera persona (Seeker en Hunt): campo amplio para escanear
 const FOV_TP = 60; // tercera persona / vistas generales
+const REVEAL_RADIUS = 4.5; // órbita del tour de revelado (V1-F)
+const REVEAL_HEIGHT = 2.6;
 
 const _target = new THREE.Vector3();
 const _desired = new THREE.Vector3();
@@ -77,7 +80,27 @@ export function CameraRig() {
       return;
     }
 
-    // ── Lobby / Ended: vista aérea-trasera con suavizado. ──
+    // ── ENDED con tour de revelado (V1-F, answer-check): la cámara ORBITA el
+    //    escondite de cada Hider (atrapados primero, supervivientes al final). ──
+    if (phase === 'ended' && st.revealList && st.endedAt !== null) {
+      const elapsed = (performance.now() - st.endedAt) / 1000;
+      const idx = revealIndexAt(elapsed, st.revealList.length);
+      if (idx >= 0) {
+        const entry = st.revealList[idx]!;
+        const angle = elapsed * 0.7; // órbita lenta continua
+        _target.set(entry.x, 0.9, entry.z);
+        _desired.set(
+          entry.x + Math.sin(angle) * REVEAL_RADIUS,
+          entry.y + REVEAL_HEIGHT,
+          entry.z + Math.cos(angle) * REVEAL_RADIUS,
+        );
+        camera.position.lerp(_desired, 1 - Math.pow(0.0000001, delta)); // viaje rápido + órbita suave
+        camera.lookAt(_target);
+        return;
+      }
+    }
+
+    // ── Lobby / Ended (tras el tour): vista aérea-trasera con suavizado. ──
     _target.set(lp.x, lp.y + 1, lp.z);
     _desired.copy(_target).add(OVERVIEW);
     camera.position.lerp(_desired, 1 - Math.pow(0.0015, delta));

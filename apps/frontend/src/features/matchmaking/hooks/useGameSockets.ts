@@ -22,6 +22,7 @@ import {
   type UserCommand,
 } from '@mecha/shared';
 import { DEFAULT_SIM_CONFIG, Vec3 } from '@mecha/sim';
+import { buildRevealList, type RevealSubject } from '@/features/canvas-3d/hooks/reveal';
 
 const DT = 1 / DEFAULT_SIM_CONFIG.tickHz;
 const MAX_PENDING_INPUTS = 120; // ~4 s a 30 Hz: cota ante pérdida de snapshots
@@ -95,10 +96,15 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   for (const p of snap.players) {
     if (p.id === st.localPlayerId) {
       // Jugador local: reconciliar (re-aplica los inputs no confirmados; sin snap).
+      const wasCaught = st.local.caught;
       reconcile(st.local, pending, p, snap.phase, DEFAULT_SIM_CONFIG);
       // Camuflaje y munición son autoritativos del servidor (no se predicen): cópialos.
       st.local.camoScore = p.camoScore;
       st.local.ammo = p.ammo;
+      // Recuerda DÓNDE te atraparon (el reveal muestra el escondite, no dónde acabas).
+      if (!wasCaught && st.local.caught) {
+        st.catchSpots.set(p.id, { x: p.x, y: p.y, z: p.z });
+      }
       continue;
     }
     seen.add(p.id);
@@ -124,7 +130,10 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
       st.remotes.set(p.id, e);
     }
     pushRemoteSnapshot(e.buffer, { tick: snap.tick, recvAt: now, x: p.x, y: p.y, z: p.z });
-    if (p.caught && !e.caught) confirmedHits++; // transición: alguien acaba de caer
+    if (p.caught && !e.caught) {
+      confirmedHits++; // transición: alguien acaba de caer
+      st.catchSpots.set(p.id, { x: p.x, y: p.y, z: p.z }); // su escondite (para el reveal)
+    }
     e.role = p.role;
     e.frozen = p.frozen;
     e.caught = p.caught;
@@ -147,6 +156,48 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   if (confirmedHits > 0 && st.local.role === 'seeker') {
     worldStore.setState({ hitPulse: worldStore.getState().hitPulse + confirmedHits });
   }
+
+  // ── Answer-check (V1-F): al ENTRAR en `ended`, congela la lista de escondites
+  //    (posición/pintura/pose finales de cada Hider) para el tour de revelado. ──
+  const prevPhase = worldStore.getState().phase;
+  if (snap.phase === 'ended' && prevPhase !== 'ended') {
+    const lc = st.local.color;
+    const localSpot = st.catchSpots.get(st.localPlayerId);
+    const subjects: RevealSubject[] = [
+      {
+        id: st.localPlayerId,
+        // Atrapado: revela DÓNDE cayó (después se movió como Seeker por la infección).
+        x: localSpot ? localSpot.x : st.local.pos.x,
+        y: localSpot ? localSpot.y : st.local.pos.y,
+        z: localSpot ? localSpot.z : st.local.pos.z,
+        role: st.local.role,
+        caught: st.local.caught,
+        colorPacked:
+          ((((lc.r & 0xff) << 24) | ((lc.g & 0xff) << 16) | ((lc.b & 0xff) << 8) | 0xff) >>> 0),
+        camoScore: st.local.camoScore,
+        pose: st.local.pose,
+      },
+    ];
+    for (const e of st.remotes.values()) {
+      const spot = st.catchSpots.get(e.id) ?? e.buffer[e.buffer.length - 1] ?? e.render;
+      subjects.push({
+        id: e.id,
+        x: spot.x,
+        y: spot.y,
+        z: spot.z,
+        role: e.role,
+        caught: e.caught,
+        colorPacked: e.colorPacked,
+        camoScore: e.camoScore,
+        pose: e.pose,
+      });
+    }
+    worldStore.setState({ revealList: buildRevealList(subjects), endedAt: performance.now() });
+  } else if (snap.phase !== 'ended' && prevPhase === 'ended') {
+    st.catchSpots.clear(); // revancha: fuera el tour y las capturas de la ronda anterior
+    worldStore.setState({ revealList: null, endedAt: null });
+  }
+
   // LENTO: notifica al HUD. Los selectores reactivos hacen bail-out si el valor no
   // cambió, así que publicar `localRole` cada tick es barato (solo re-renderiza al
   // cambiar de rol, p. ej. cuando un Hider es atrapado y pasa a Seeker).

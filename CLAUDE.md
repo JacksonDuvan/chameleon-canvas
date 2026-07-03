@@ -161,22 +161,23 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/11-step-8-visual-pass.md`](docs/11-step-8-visual-pass.md) — **pass visual V1-G**: cielo+sol+PCSS (drei), flat-shading low-poly, avatar por pose (geometrías fusionadas, testeadas contra el hitbox del server), horizonte decorativo `noSample`, HUD "juguete de selva", FOV dinámico. Sin dependencias nuevas ni `.glb`.
 - [`docs/12-step-9-pueblo-decoys.md`](docs/12-step-9-pueblo-decoys.md) — **V1-G v2 (post-playtest)**: avatar = MUÑECO liso del original (4 poses fieles), mapa `pueblo-01` 48×48 (casas/barrios/plaza), **señuelos `figure`/`figureWall`** renderizados con la geometría del avatar (mimetismo real: la tesis "te escondes entre cosas que se parecen a ti"), viewmodel del arma.
 - [`docs/13-step-10-round2-feedback.md`](docs/13-step-10-round2-feedback.md) — **2ª ronda de playtest**: FIN INSTANTÁNEO al caer el último Hider (TDD), fix del BUG del temblor (sim 30 Hz vs render 60+: `sampleLocalMut` suaviza al local en MechaMesh/CameraRig/LocalMarker), caminata con bamboleo por instancia, miniciudad (+4 casas, test ≥16 muros), contador de Hiders en HUD, prep 60 s. Hooks E2E dev-only (`window.__world`/`__look`).
+- [`docs/14-step-11-results-reveal.md`](docs/14-step-11-results-reveal.md) — **V1-F results/reveal (answer-check)**: tour de cámara orbitando cada escondite (atrapados→supervivientes, `catchSpots` = dónde cayeron) + tarjeta HUD + panel final. **🐛 fix crítico**: el `SimConfig` persistido rehidrataba salas "congeladas en el pasado" (catchRange 3 viejo ⇒ disparos a distancia jamás atrapaban — el bug que sufría el playtest del usuario); regla: el SimConfig es CÓDIGO, no estado (test de regresión). Lecciones E2E: zombies de workerd, pointer lock headless.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
 ciclo jugable + claridad + robustez de salas · Paso 6 ✅ núcleo de camuflaje (P0.1→P0.3,
 `docs/08`) · Paso 7 ✅ núcleo de esconderse de V1 (V1-A/B/C + disparos del 7.5; wire
 v4, `docs/10`) · Paso 8 ✅ pass visual V1-G (`docs/11`) · Paso 9 ✅ V1-G v2: muñeco
-del original + pueblo 48×48 + señuelos (`docs/12`) · **Paso 10 ✅ 2ª ronda de
-playtest: fin instantáneo, fix del temblor, caminata, miniciudad, contador de Hiders
-— ver `docs/13`**.
+del original + pueblo 48×48 + señuelos (`docs/12`) · Paso 10 ✅ fin instantáneo +
+fix temblor + caminata + miniciudad (`docs/13`) · **Paso 11 ✅ V1-F results/reveal +
+fix crítico del SimConfig persistido — ver `docs/14`**.
 **Ya se puede esconder ENTRE cosas que se parecen a ti** (señuelos con la geometría
 del avatar), pendiente del veredicto del playtest. **El objetivo es lanzar una V1**:
 clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**.
 El corte y la "definición de done" de V1 están en
 **[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (backlog completo en [`docs/06`](docs/06-roadmap.md)).
-**Siguiente:** playtest del pass visual (usuario) · **V1-F results/reveal** · **V1-E
-matchmaking por código** · audio (V1-H) · deploy (V1-I). Al continuar
+**Siguiente:** playtest (usuario) · **V1-E matchmaking por código** · audio (V1-H) ·
+deploy (V1-I). Al continuar
 en otra sesión: lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la
 skill relevante.
 

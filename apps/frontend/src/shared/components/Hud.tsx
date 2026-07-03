@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
+import { revealIndexAt } from '@/features/canvas-3d/hooks/reveal';
 import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 
 const PHASE_LABEL: Record<string, string> = {
@@ -145,6 +146,33 @@ function camoColor(v: number): string {
   return `hsl(${Math.round(v * 120)}, 75%, 45%)`;
 }
 
+/**
+ * Índice del escondite en curso del tour de revelado (V1-F). Avanza por tiempo desde
+ * `endedAt`; -1 = tour terminado (o sin tour) ⇒ panel final. Interval a 5 Hz con
+ * bail-out (re-render solo al cambiar de escondite). La cámara (CameraRig) calcula el
+ * MISMO índice con la misma función pura — HUD y cámara nunca se desincronizan.
+ */
+function useRevealIndex(endedAt: number | null, listLength: number): number {
+  const [idx, setIdx] = useState(-1);
+  useEffect(() => {
+    if (endedAt === null || listLength === 0) {
+      setIdx(-1);
+      return;
+    }
+    const compute = (): void =>
+      setIdx(revealIndexAt((performance.now() - endedAt) / 1000, listLength));
+    compute();
+    const id = setInterval(compute, 200);
+    return () => clearInterval(id);
+  }, [endedAt, listLength]);
+  return idx;
+}
+
+/** Color CSS de la pintura final de un jugador (0xRRGGBBAA → #rrggbb). */
+function packedToCss(packed: number): string {
+  return `#${((packed >>> 8) & 0xffffff).toString(16).padStart(6, '0')}`;
+}
+
 /** Hit marker: visible ~400 ms cada vez que el servidor confirma una captura. */
 function useHitMarker(): boolean {
   const hitPulse = useStore(worldStore, (s) => s.hitPulse);
@@ -166,11 +194,16 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
   const localRole = useStore(worldStore, (s) => s.localRole);
   const lastError = useStore(worldStore, (s) => s.lastError);
   const pointerLocked = useStore(worldStore, (s) => s.pointerLocked);
+  const revealList = useStore(worldStore, (s) => s.revealList);
+  const endedAt = useStore(worldStore, (s) => s.endedAt);
+  const localPlayerId = useStore(worldStore, (s) => s.localPlayerId);
   const countdown = usePhaseCountdown(phase);
   const status = useLocalStatus();
   const justCaught = useJustCaught(status.caught);
   const hitMarker = useHitMarker();
   const hiders = useHidersCount();
+  const revealIdx = useRevealIndex(endedAt, revealList?.length ?? 0);
+  const revealEntry = revealIdx >= 0 ? (revealList?.[revealIdx] ?? null) : null;
 
   // La barra de camuflaje y la pose son para el Hider vivo, en juego.
   const showCamo = localRole === 'hider' && !status.caught && (phase === 'prep' || phase === 'hunt');
@@ -302,8 +335,29 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
         </div>
       )}
 
-      {/* Panel central de fin de ronda + "Jugar otra vez" */}
-      {phase === 'ended' && (
+      {/* Tour de revelado (V1-F, answer-check): tarjeta del escondite en curso.
+          La cámara (CameraRig) orbita el MISMO escondite; el panel final llega después. */}
+      {phase === 'ended' && revealEntry && (
+        <div className="hud-reveal">
+          <div className="hud-reveal-step">
+            🔎 Escondite {revealIdx + 1} / {revealList!.length}
+          </div>
+          <div className="hud-reveal-row">
+            <span className="hud-swatch" style={{ background: packedToCss(revealEntry.colorPacked) }} />
+            <span className={revealEntry.caught ? 'hud-reveal-caught' : 'hud-reveal-alive'}>
+              {revealEntry.caught ? '✕ Atrapado' : '🦎 ¡Sobrevivió!'}
+            </span>
+            {revealEntry.id === localPlayerId && <span className="hud-reveal-you">(tú)</span>}
+          </div>
+          <div className="hud-reveal-meta">
+            Camuflaje {Math.round(revealEntry.camoScore * 100)}% · Pose:{' '}
+            {POSE_LABEL[revealEntry.pose & 3]}
+          </div>
+        </div>
+      )}
+
+      {/* Panel central de fin de ronda + "Jugar otra vez" (tras el tour) */}
+      {phase === 'ended' && !revealEntry && (
         <div className="hud-overlay hud-overlay--end">
           <div className="hud-overlay-emoji">{outcome === 'hiders' ? '🦎' : outcome === 'seekers' ? '🔦' : '🏁'}</div>
           <div className="hud-overlay-title">

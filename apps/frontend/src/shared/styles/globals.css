@@ -364,6 +364,61 @@ body,
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
 }
 
+/* Tarjeta del tour de revelado (answer-check, V1-F) */
+.hud-reveal {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 22px;
+  border-radius: 18px;
+  background: var(--ink);
+  border: 1px solid var(--ink-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  animation: hud-rise 260ms ease-out;
+}
+.hud-reveal-step {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.hud-reveal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+}
+.hud-reveal-alive {
+  color: var(--leaf);
+}
+.hud-reveal-caught {
+  color: #ff9d9d;
+}
+.hud-reveal-you {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sun);
+}
+.hud-reveal-meta {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.hud-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
 /* Zona inferior del lobby */
 .hud-lobby {
   position: absolute;

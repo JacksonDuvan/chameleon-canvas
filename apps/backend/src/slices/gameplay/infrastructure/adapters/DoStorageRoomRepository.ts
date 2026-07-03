@@ -32,6 +32,7 @@ interface PlayerSnapshot {
   vy: number;
   vz: number;
   aimX: number;
+  aimY?: number; // opcional: snapshots antiguos no lo tienen (default 0)
   aimZ: number;
   r: number;
   g: number;
@@ -41,6 +42,9 @@ interface PlayerSnapshot {
   caught: boolean;
   colorLockedUntil: number;
   lastProcessedInput: number;
+  pose?: number; // estado de ronda (V1-B/7.5); opcionales por retro-compatibilidad
+  ammo?: number;
+  shotCooldownUntil?: number;
 }
 
 interface RoomSnapshot {
@@ -71,6 +75,7 @@ function toSnapshot(room: Room): RoomSnapshot {
       vy: p.vel.y,
       vz: p.vel.z,
       aimX: p.aimX,
+      aimY: p.aimY,
       aimZ: p.aimZ,
       r: p.color.r,
       g: p.color.g,
@@ -80,6 +85,9 @@ function toSnapshot(room: Room): RoomSnapshot {
       caught: p.caught,
       colorLockedUntil: p.colorLockedUntil,
       lastProcessedInput: p.lastProcessedInput,
+      pose: p.pose,
+      ammo: p.ammo,
+      shotCooldownUntil: p.shotCooldownUntil,
     });
   }
   const roster = [...room.roster.values()].map((p) => ({
@@ -105,7 +113,11 @@ function toSnapshot(room: Room): RoomSnapshot {
 }
 
 function fromSnapshot(s: RoomSnapshot): Room {
-  const room = new Room(s.id, s.config, s.seed, s.simConfig);
+  // El `SimConfig` es CÓDIGO, no estado: se rehidrata SIEMPRE con el del build actual
+  // (ignorando `s.simConfig`). Regresión real: una sala persistida con el catchRange
+  // viejo (3 m) revivía "congelada en el pasado" y los disparos a distancia nunca
+  // atrapaban. Cuando el host tenga opciones (V1-E), irán en `RoomConfig`.
+  const room = new Room(s.id, s.config, s.seed);
   room.hostId = s.hostId;
   room.world.tick = s.tick;
   room.world.phase = s.phase;
@@ -117,7 +129,11 @@ function fromSnapshot(s: RoomSnapshot): Room {
     p.pos.setMut(ps.x, ps.y, ps.z);
     p.vel.setMut(ps.vx, ps.vy, ps.vz);
     p.aimX = ps.aimX;
+    p.aimY = ps.aimY ?? 0;
     p.aimZ = ps.aimZ;
+    p.pose = ps.pose ?? 0;
+    p.ammo = ps.ammo ?? 0;
+    p.shotCooldownUntil = ps.shotCooldownUntil ?? 0;
     p.color.setMut(ps.r, ps.g, ps.b, ps.a);
     p.frozen = ps.frozen;
     p.caught = ps.caught;

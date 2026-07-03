@@ -14,6 +14,7 @@
 import { createStore } from 'zustand/vanilla';
 import { Vec3, PlayerState, type GameOutcome } from '@mecha/sim';
 import type { GamePhase, PlayerRole } from '@mecha/shared';
+import type { RevealEntry } from '../hooks/reveal';
 
 /** Snapshot de un remoto para interpolar en el pasado. */
 export interface RemoteSnapshot {
@@ -63,6 +64,12 @@ export interface WorldStoreState {
   lastError: string | null; // último error de control del servidor (p. ej. NotHost)
   pointerLocked: boolean; // ¿el canvas tiene el ratón capturado? (hint del HUD, V1-C)
   hitPulse: number; // contador: sube cuando el servidor confirma una captura (hit marker)
+  // ── Answer-check (V1-F): congelado al ENTRAR en `ended`; null fuera de results ──
+  revealList: RevealEntry[] | null; // escondites a revelar (atrapados → supervivientes)
+  endedAt: number | null; // ms (performance.now) del inicio del tour
+  /** Dónde ATRAPARON a cada uno (un atrapado se vuelve Seeker y se mueve; el reveal
+   *  debe mostrar el escondite donde cayó). Lo muta la red; se limpia al reiniciar. */
+  readonly catchSpots: Map<string, { x: number; y: number; z: number }>;
 }
 
 export const worldStore = createStore<WorldStoreState>(() => ({
@@ -80,4 +87,7 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   lastError: null,
   pointerLocked: false,
   hitPulse: 0,
+  revealList: null,
+  endedAt: null,
+  catchSpots: new Map(),
 }));
