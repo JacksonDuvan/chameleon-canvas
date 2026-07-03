@@ -15,6 +15,7 @@
  */
 import { useEffect } from 'react';
 import { ActionKind } from '@mecha/shared';
+import { POSE_COUNT } from '@mecha/sim';
 import { lookState, consumePendingShot } from '@/features/canvas-3d/hooks/useMouseLook';
 import { signalLocalShot } from '@/features/canvas-3d/components/ShotTracers';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
@@ -30,7 +31,7 @@ export function useLocalInput(sockets: GameSockets): void {
 
     const down = (e: KeyboardEvent): void => {
       const k = e.key.toLowerCase();
-      if (k === 'r' && !e.repeat) pose = (pose + 1) & 3;
+      if (k === 'r' && !e.repeat) pose = (pose + 1) % POSE_COUNT; // cicla las 6 poses
       if (k === 'f' && !e.repeat) pendingKeyShots++;
       keys.add(k);
     };

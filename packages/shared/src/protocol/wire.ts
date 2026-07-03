@@ -27,7 +27,9 @@ import type { UserCommand } from './commands';
 // queda RESERVADO. Cliente y servidor despliegan juntos (monorepo).
 // v5 (mapa ALEATORIO por ronda): el header lleva `mapSeed` (u32); cliente y servidor
 // generan el MISMO mapa con `generateMap(mapSeed)` — el mapa no viaja entero.
-export const PROTOCOL_VERSION = 5;
+// v6 (más figuras de mimetismo: caja, barril): la pose pasa de 2 a 3 bits (0..7) en
+// los bits 3-5 de roleFlags — el bit 3 estaba RESERVADO. INPUT ya la manda como u8.
+export const PROTOCOL_VERSION = 6;
 export const MAX_SNAPSHOT_BYTES = 8192;
 export const MAX_INPUT_BYTES = 64;
 
@@ -185,12 +187,12 @@ const _snapWriter = new ByteWriter(new ArrayBuffer(MAX_SNAPSHOT_BYTES));
 const _inputWriter = new ByteWriter(new ArrayBuffer(MAX_INPUT_BYTES));
 
 function packRoleFlags(p: WirePlayer): number {
-  // bit 3 RESERVADO (fue beingWatched en v2/v3).
+  // role(bit0) frozen(bit1) caught(bit2) pose(bits 3-5, 0..7 — v6: caja/barril).
   return (
     (p.role === 'seeker' ? 1 : 0) |
     (p.frozen ? 2 : 0) |
     (p.caught ? 4 : 0) |
-    ((p.pose & 3) << 4)
+    ((p.pose & 7) << 3)
   );
 }
 function packColor(c: WirePlayer['color']): number {
@@ -339,7 +341,7 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
       role: (flags & 1) === 1 ? 'seeker' : 'hider',
       frozen: (flags & 2) === 2,
       caught: (flags & 4) === 4,
-      pose: (flags >> 4) & 3,
+      pose: (flags >> 3) & 7,
       x,
       y,
       z,

@@ -95,7 +95,7 @@ function useLocalStatus(): LocalStatus {
   return status;
 }
 
-const POSE_LABEL = ['De pie', 'Agachado', 'Bola', 'Plano (pared)'];
+const POSE_LABEL = ['De pie', 'Agachado', 'Bola', 'Plano (pared)', 'Caja', 'Barril'];
 
 /**
  * Hiders vivos/atrapados (feedback de captura para TODOS, como la fila de muñecos del
@@ -351,7 +351,7 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
           </div>
           <div className="hud-reveal-meta">
             Camuflaje {Math.round(revealEntry.camoScore * 100)}% · Pose:{' '}
-            {POSE_LABEL[revealEntry.pose & 3]}
+            {POSE_LABEL[revealEntry.pose] ?? 'De pie'}
           </div>
         </div>
       )}

@@ -98,7 +98,19 @@ describe('wire · KEYFRAME', () => {
     expect(h1.frozen).toBe(true);
     expect(h1.y).toBeCloseTo(1.5, 2);
     expect(h1.camoScore).toBeCloseTo(0.75, 2); // ±1/255 por la cuantización a u8
-    expect(h1.pose).toBe(3); // wall-flat (bits 4-5 de roleFlags)
+    expect(h1.pose).toBe(3); // wall-flat (bits 3-5 de roleFlags)
+  });
+
+  it('las poses de mimetismo (caja=4, barril=5) sobreviven el round-trip (v6, 3 bits)', () => {
+    for (const pose of [0, 3, 4, 5]) {
+      const world = mkWorld([mkPlayer('h', { pose, caught: true, role: 'seeker' })]);
+      const snap = decodeSnapshot(encodeKeyframe(world).slice().buffer);
+      const h = snap.players[0]!;
+      expect(h.pose, `pose ${pose}`).toBe(pose);
+      // La pose no debe pisar los otros flags (role/caught) que comparten el byte.
+      expect(h.role).toBe('seeker');
+      expect(h.caught).toBe(true);
+    }
   });
 });
 

@@ -52,7 +52,9 @@ function advanceWobble(dist: number, dt: number, amp: number): number {
 }
 
 export function Players() {
-  const refs = useRef<Array<THREE.InstancedMesh | null>>([null, null, null, null]);
+  const refs = useRef<Array<THREE.InstancedMesh | null>>(
+    new Array<THREE.InstancedMesh | null>(POSE_COUNT).fill(null),
+  );
 
   // Geometrías con los pies en y=0 (contrato de avatarGeometry: sin offset por pose).
   // Material LISO con el MISMO roughness que los señuelos del mapa (AVATAR_ROUGHNESS):
@@ -79,11 +81,11 @@ export function Players() {
       wobblePhase: number,
       wobbleAmp: number,
     ): void => {
-      const pi = pose & 3;
+      const pi = pose >= 0 && pose < POSE_COUNT ? pose : 0;
       const mesh = meshes[pi];
       if (!mesh || _counts[pi]! >= MAX_PLAYERS) return;
       const i = _counts[pi]!;
-      // Bamboleo de caminata: solo poses "a pie" (la bola y el plano no caminan así).
+      // Bamboleo de caminata: solo poses "a pie" (bola/plano/caja/barril no caminan así).
       const wobbles = (pi === POSE_STAND || pi === POSE_CROUCH) && wobbleAmp > 0.02;
       const bob = wobbles ? Math.abs(Math.sin(wobblePhase)) * WOBBLE_BOB * wobbleAmp : 0;
       _obj.position.set(x, y + bob, z);

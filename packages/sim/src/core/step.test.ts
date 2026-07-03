@@ -337,12 +337,12 @@ describe('step — sin congelado voluntario (regresión del playtest)', () => {
 });
 
 describe('step — poses (V1-B)', () => {
-  it('el Hider adopta la pose del comando en Prep (y se sanea a 0..3)', () => {
+  it('el Hider adopta la pose del comando en Prep (y se sanea a una pose válida)', () => {
     const w = worldInPhase('prep', [{ id: 'h', role: 'hider' }]);
-    step(w, [mkCmd('h', { pose: 2 })], DT, rng, physics);
-    expect(w.players.get('h')!.pose).toBe(2);
-    step(w, [mkCmd('h', { pose: 255 })], DT, rng, physics); // valor tramposo
-    expect(w.players.get('h')!.pose).toBe(3); // 255 & 3
+    step(w, [mkCmd('h', { pose: 5 })], DT, rng, physics); // barril (POSE_CYLINDER)
+    expect(w.players.get('h')!.pose).toBe(5);
+    step(w, [mkCmd('h', { pose: 255 })], DT, rng, physics); // valor tramposo → 0
+    expect(w.players.get('h')!.pose).toBe(0);
   });
 
   it('la pose queda FIJA durante Hunt (congelado automático)', () => {

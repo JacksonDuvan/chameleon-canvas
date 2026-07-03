@@ -12,7 +12,16 @@
  *     del mapa (mimetismo de objeto, biblia `mecha-chameleon-gamedesign`).
  */
 import { describe, expect, it } from 'vitest';
-import { POSE_BALL, POSE_BODY_CY, POSE_BODY_R, POSE_COUNT, POSE_CROUCH, POSE_FLAT } from '@mecha/sim';
+import {
+  POSE_BALL,
+  POSE_BODY_CY,
+  POSE_BODY_R,
+  POSE_BOX,
+  POSE_COUNT,
+  POSE_CROUCH,
+  POSE_CYLINDER,
+  POSE_FLAT,
+} from '@mecha/sim';
 import { buildPoseGeometries, VISUAL_FRINGE } from './avatarGeometry';
 
 describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
@@ -77,6 +86,29 @@ describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
     g.computeBoundingBox();
     const bb = g.boundingBox!;
     expect(Math.max(Math.abs(bb.min.z), Math.abs(bb.max.z))).toBeLessThanOrEqual(0.3);
+  });
+
+  it('la pose CAJA es una silueta cúbica (se funde con las cajas del mapa)', () => {
+    const g = geometries[POSE_BOX]!;
+    g.computeBoundingBox();
+    const bb = g.boundingBox!;
+    const w = bb.max.x - bb.min.x;
+    const d = bb.max.z - bb.min.z;
+    const hgt = bb.max.y - bb.min.y;
+    // Ancho, fondo y alto parecidos (cubo), no una silueta humana esbelta.
+    expect(Math.abs(w - d)).toBeLessThan(0.25);
+    expect(hgt / w).toBeGreaterThan(0.6);
+    expect(hgt / w).toBeLessThan(1.6);
+  });
+
+  it('la pose BARRIL es redonda en planta (x≈z; se funde con los barriles)', () => {
+    const g = geometries[POSE_CYLINDER]!;
+    g.computeBoundingBox();
+    const bb = g.boundingBox!;
+    const w = bb.max.x - bb.min.x;
+    const d = bb.max.z - bb.min.z;
+    expect(Math.abs(w - d)).toBeLessThan(0.15); // sección circular
+    expect(bb.max.y - bb.min.y).toBeGreaterThan(w * 0.8); // más alto que ancho (barril)
   });
 
   it('la pose bola es casi esférica (se funde con las bolas decorativas del mapa)', () => {

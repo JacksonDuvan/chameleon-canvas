@@ -22,6 +22,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { POSE_COUNT } from '@mecha/sim';
 
 /** Desborde máximo (m) de la silueta visual respecto al hitbox del server. */
@@ -98,6 +99,17 @@ function buildBall(): THREE.BufferGeometry {
   ]);
 }
 
+/** Caja (~1.1 m): el Hider se hace una CAJA — se funde con las cajas del mapa
+ *  (mimetismo de objeto del original). Cubo biselado; el hitbox lo cubre. */
+function buildBox(): THREE.BufferGeometry {
+  return fuse([new RoundedBoxGeometry(1.1, 1.05, 1.1, 2, 0.06).translate(0, 0.53, 0)]);
+}
+
+/** Barril (~1.4 m): el Hider se hace un CILINDRO — se funde con los barriles del mapa. */
+function buildCylinder(): THREE.BufferGeometry {
+  return fuse([new THREE.CylinderGeometry(0.58, 0.58, 1.35, 14).translate(0, 0.68, 0)]);
+}
+
 /** Plano (galleta, ~1.5 m): silueta de muñeco APLASTADA — idéntica a los señuelos
  *  `figureWall` de las fachadas del mapa. Delgada en Z (el yaw la alinea al muro). */
 function buildFlat(): THREE.BufferGeometry {
@@ -112,9 +124,10 @@ function buildFlat(): THREE.BufferGeometry {
   ]);
 }
 
-/** Una geometría fusionada por pose, indexada por el valor de pose del sim (0..3). */
+/** Una geometría fusionada por pose, indexada por el valor de pose del sim (0..5). */
 export function buildPoseGeometries(): THREE.BufferGeometry[] {
-  const out = [buildStand(), buildCrouch(), buildBall(), buildFlat()];
+  // Orden = POSE_STAND, CROUCH, BALL, FLAT, BOX, CYLINDER (índices del sim).
+  const out = [buildStand(), buildCrouch(), buildBall(), buildFlat(), buildBox(), buildCylinder()];
   if (out.length !== POSE_COUNT) throw new Error('avatarGeometry: falta una pose');
   return out;
 }
