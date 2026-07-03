@@ -63,7 +63,7 @@ Orden sugerido de ejecución entre paréntesis. `✅`=hecho · `🟡`=parcial ·
 | **V1-D** | Camuflaje (barra) + caza por **disparos del original** (ilimitados por defecto; modo limitado 2.3.0 como opción; sustituyó a la fijación tras el playtest, ver [`docs/10`](10-step-7-hiding-core.md) §7.5) | ✅ | Hecho; seguir balanceando jugando (cooldown/alcance). |
 | **V1-E** | **Matchmaking**: crear/unirse por código + nombre (P2.1, cierra Hono RPC) | ❌ (3) | Para jugar con gente / lanzar al público. |
 | **V1-F** | **Bucle + resultados/reveal** (P1.3): pantalla de fin que **revela** dónde se escondió cada uno; feedback de roles | 🟡 (2) | El *payoff* divertido ("answer-check"). |
-| **V1-G** | **Pass visual estilizado**: cielo, luz, sombras suaves, personaje con silueta decente, HUD con botones/timer/placas de nombre | ❌ (4) | Que parezca un juego, no una escena de debug. Ver §5. |
+| **V1-G** | **Pass visual estilizado**: cielo, luz, sombras suaves, personaje con silueta decente, HUD con botones/timer (placas de nombre → con V1-E) | ✅ ([`docs/11`](11-step-8-visual-pass.md)) | Que parezca un juego, no una escena de debug. Ver §5. |
 | **V1-H** | **Audio mínimo**: SFX de captura + ambiente (silbido/whistling opcional, P2.2) | ❌ (5) | "Juice" barato que sube mucho la diversión. |
 | **V1-I** | **Deploy a producción** (P4.3): `wrangler deploy` back+front en el edge | ❌ (6) | Para que sea público y jugable **sin instalar nada**. |
 
@@ -115,7 +115,8 @@ Post-V1 (siguen en [`docs/06`](06-roadmap.md), no se tocan para lanzar):
 - [ ] Un Hider **camuflado + posado + quieto entre props NO es detectado** por un Seeker que
       ronda cerca; uno mal escondido/en movimiento **sí** cae. *(La regla innegociable, §1.)*
 - [ ] El **Seeker caza en 1ª persona apuntando con el ratón**.
-- [ ] **Se ve como un juego** (estilizado, §5), no como una escena de debug.
+- [x] **Se ve como un juego** (estilizado, §5), no como una escena de debug — pass V1-G
+      ([`docs/11`](11-step-8-visual-pass.md)); pendiente del veredicto del playtest.
 - [ ] **Desplegado en el edge**, jugable desde una URL, **sin descargas**.
 - [ ] `pnpm test` · `test:do` · `typecheck` · `lint` en verde; smoke test multi-cliente.
 

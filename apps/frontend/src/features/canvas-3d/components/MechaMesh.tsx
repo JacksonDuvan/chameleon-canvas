@@ -1,8 +1,8 @@
 /**
  * Players — render de TODOS los avatares con UN `InstancedMesh` POR POSE (V1-B):
- * de pie (cápsula), agachado (cápsula baja), bola (esfera) y plano-pared (panel).
- * 4 draw calls como máximo; cada jugador se escribe en la malla de su pose y se
- * ORIENTA por su yaw (derivado del apunte) — girar para encajar contra un prop.
+ * silueta de CAMALEÓN low-poly por pose (`avatarGeometry`, V1-G) — de pie, agachado,
+ * bola y plano-pared. 4 draw calls como máximo; cada jugador se escribe en la malla
+ * de su pose y se ORIENTA por su yaw (derivado del apunte) — girar para encajar.
  *
  * El jugador local NO se dibuja cuando está en primera persona (Seeker en HUNT):
  * la cámara está dentro de su cuerpo.
@@ -18,11 +18,9 @@ import { useFrame } from '@react-three/fiber';
 import { POSE_COUNT } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { sampleRemote, INTERP_DELAY_MS } from '../hooks/interpolation';
+import { buildPoseGeometries } from './avatarGeometry';
 
 const MAX_PLAYERS = 16;
-
-// Media altura visual por pose (el origen de la geometría está en su centro).
-const POSE_HALF_H: readonly number[] = [0.85, 0.57, 0.55, 0.75];
 
 // Scratch de ámbito de módulo: el render es monohilo y `useFrame` es síncrono.
 const _obj = new THREE.Object3D();
@@ -32,16 +30,12 @@ const _counts = new Int32Array(POSE_COUNT);
 export function Players() {
   const refs = useRef<Array<THREE.InstancedMesh | null>>([null, null, null, null]);
 
-  const geometries = useMemo(
-    () => [
-      new THREE.CapsuleGeometry(0.4, 0.9, 4, 8), // de pie (~1.7 de alto)
-      new THREE.CapsuleGeometry(0.42, 0.3, 4, 8), // agachado (~1.14)
-      new THREE.SphereGeometry(0.55, 12, 10), // bola
-      new THREE.BoxGeometry(0.9, 1.5, 0.28), // plano contra la pared
-    ],
+  // Geometrías con los pies en y=0 (contrato de avatarGeometry: sin offset por pose).
+  const geometries = useMemo(() => buildPoseGeometries(), []);
+  const material = useMemo(
+    () => new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }),
     [],
   );
-  const material = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.8 }), []);
 
   useFrame(() => {
     const meshes = refs.current;
@@ -62,7 +56,7 @@ export function Players() {
       const mesh = meshes[pi];
       if (!mesh || _counts[pi]! >= MAX_PLAYERS) return;
       const i = _counts[pi]!;
-      _obj.position.set(x, y + POSE_HALF_H[pi]!, z);
+      _obj.position.set(x, y, z);
       _obj.rotation.y = Math.atan2(aimX, aimZ); // orientado por el apunte (yaw)
       _obj.updateMatrix();
       mesh.setMatrixAt(i, _obj.matrix);

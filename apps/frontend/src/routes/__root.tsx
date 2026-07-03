@@ -5,6 +5,7 @@
  * el shell del documento, NUNCA lógica de juego (skill `hexagonal-vertical-slicing`).
  */
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import globalsCssUrl from '@/shared/styles/globals.css?url';
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,6 +14,9 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'Meccha Chameleon Clone' },
     ],
+    // Hoja global (sistema visual del HUD, V1-G) vía <link> del head: así el SSR de
+    // Start la sirve ANTES de hidratar (sin flash de HUD sin estilo).
+    links: [{ rel: 'stylesheet', href: globalsCssUrl }],
   }),
   notFoundComponent: () => (
     <main style={{ font: '16px system-ui, sans-serif', padding: 24 }}>

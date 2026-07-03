@@ -41,9 +41,10 @@ function Game() {
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
       <Canvas shadows camera={{ position: [0, 12, 16], fov: 60 }}>
-        {/* Fondo + niebla suave: profundidad visual barata (ayuda a leer distancias). */}
-        <color attach="background" args={['#aebfd0']} />
-        <fog attach="fog" args={['#aebfd0', 28, 70]} />
+        {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.
+            El fondo hace de fallback si el cielo aún no se pintó. */}
+        <color attach="background" args={['#cfdce8']} />
+        <fog attach="fog" args={['#cfdce8', 32, 110]} />
         <Scene />
         <Controles sockets={sockets} />
       </Canvas>

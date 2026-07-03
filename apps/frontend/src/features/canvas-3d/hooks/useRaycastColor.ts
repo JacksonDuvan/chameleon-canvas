@@ -26,7 +26,14 @@ export function useRaycastColor(
       if (e.key.toLowerCase() !== 'e') return;
       _raycaster.setFromCamera(_center, camera);
       const hits = _raycaster.intersectObjects(scene.children, true);
-      const hit = hits.find((h) => (h.object as Partial<THREE.Mesh>).material);
+      // Solo superficies JUGABLES: la decoración de horizonte (noSample), los
+      // trazadores y el marcador local no existen para el servidor — no se muestrean.
+      const hit = hits.find(
+        (h) =>
+          (h.object as Partial<THREE.Mesh>).material &&
+          !(h.object.userData?.noSample as boolean | undefined) &&
+          !(h.object.userData?.isTracer as boolean | undefined),
+      );
       if (!hit) return;
       const obj = hit.object as THREE.Mesh;
 

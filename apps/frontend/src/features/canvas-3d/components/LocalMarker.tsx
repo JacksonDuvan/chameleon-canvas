@@ -32,6 +32,15 @@ export function LocalMarker() {
     m.rotation.y = state.clock.elapsedTime * 1.5;
   });
 
-  // Cono invertido (rotación X = π) → apunta hacia abajo, al avatar.
-  return <mesh ref={ref} geometry={geometry} material={material} rotation={[Math.PI, 0, 0]} />;
+  // Cono invertido (rotación X = π) → apunta hacia abajo, al avatar. `noSample`: el
+  // cuentagotas no debe absorber el amarillo del marcador (no existe para el server).
+  return (
+    <mesh
+      ref={ref}
+      geometry={geometry}
+      material={material}
+      rotation={[Math.PI, 0, 0]}
+      userData={{ noSample: true }}
+    />
+  );
 }

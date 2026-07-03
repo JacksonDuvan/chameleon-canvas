@@ -19,6 +19,8 @@ const EYE_HEIGHT = 1.5; // = SimConfig.eyeHeight (origen del rayo de captura)
 const TP_DIST = 5.5; // distancia de la cámara en tercera persona
 const TP_HEIGHT = 3.0;
 const OVERVIEW = new THREE.Vector3(0, 12, 12); // vista aérea (lobby/ended)
+const FOV_FPP = 75; // primera persona (Seeker en Hunt): campo amplio para escanear
+const FOV_TP = 60; // tercera persona / vistas generales
 
 const _target = new THREE.Vector3();
 const _desired = new THREE.Vector3();
@@ -31,6 +33,15 @@ export function CameraRig() {
     const lp = st.local.pos;
     const phase = st.phase;
     const isSeeker = st.local.role === 'seeker';
+
+    // FOV por modo (75° FPP / 60° resto). Solo recalcula la proyección al CAMBIAR
+    // (transición de fase/rol, rara vez) — nunca por frame (skill r3f-rendering).
+    const fov = isSeeker && phase === 'hunt' ? FOV_FPP : FOV_TP;
+    const persp = camera as THREE.PerspectiveCamera;
+    if (persp.isPerspectiveCamera && persp.fov !== fov) {
+      persp.fov = fov;
+      persp.updateProjectionMatrix();
+    }
 
     if (isSeeker && phase === 'hunt') {
       // ── Primera persona: cámara EN los ojos, sin suavizado (respuesta 1:1). ──

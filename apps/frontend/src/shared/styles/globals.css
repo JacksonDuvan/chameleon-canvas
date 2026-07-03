@@ -1,6 +1,23 @@
-/* Estilos globales del cliente. SCAFFOLD del Paso 1. */
+/* Estilos globales del cliente + sistema visual del HUD (V1-G).
+   Dirección: "juguete de selva" — chips redondeados sobre tinta verde-bosque
+   translúcida, acentos amarillo-sol y verde-hoja, tipografía rounded del sistema
+   (sin fuentes externas: el cliente se sirve autocontenido desde el edge). */
 :root {
   color-scheme: dark;
+
+  --hud-font:
+    ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Varela Round', 'Nunito',
+    'Segoe UI', system-ui, sans-serif;
+  --ink: rgba(12, 26, 19, 0.78); /* tinta verde-bosque de los chips */
+  --ink-border: rgba(255, 255, 255, 0.16);
+  --paper: #f2f7ee; /* texto sobre tinta */
+  --sun: #ffd54a; /* acción primaria (marca) */
+  --sun-deep: #b98f00;
+  --leaf: #8bd450; /* acento Hider / éxito */
+  --leaf-ink: rgba(63, 125, 51, 0.85);
+  --ember: #ff9d5c; /* acento Seeker */
+  --ember-ink: rgba(194, 90, 30, 0.85);
+  --danger: #ff5252;
 }
 
 * {
@@ -15,3 +32,394 @@ body,
 }
 
 /* El <Canvas> de R3F ocupa el viewport; la UI/HUD se superpone con position. */
+
+/* ── HUD ─────────────────────────────────────────────────────────────────── */
+/* Todo el HUD es transparente al ratón salvo lo interactivo (botones). */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--hud-font);
+  color: var(--paper);
+  user-select: none;
+}
+
+/* Barra superior: 3 zonas (identidad · timer · estado) */
+.hud-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.hud-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hud-cluster--right {
+  justify-content: flex-end;
+}
+
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  border: 1px solid var(--ink-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.hud-chip--logo {
+  font-weight: 800;
+  font-size: 14px;
+  background: linear-gradient(140deg, rgba(23, 46, 30, 0.9), rgba(12, 26, 19, 0.9));
+  transform: rotate(-1.5deg); /* guiño de juguete */
+}
+.hud-chip--muted {
+  opacity: 0.75;
+  font-weight: 500;
+}
+.hud-chip--error {
+  background: rgba(90, 18, 18, 0.85);
+  color: #ffb4b4;
+}
+.hud-chip--hider {
+  background: var(--leaf-ink);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.hud-chip--seeker {
+  background: var(--ember-ink);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Timer central: el latido de la ronda */
+.hud-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.hud-timer-count {
+  min-width: 108px;
+  text-align: center;
+  padding: 8px 20px;
+  border-radius: 18px;
+  background: var(--ink);
+  border: 1px solid var(--ink-border);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.hud-timer-count--low {
+  color: #ffb1a6;
+  border-color: rgba(255, 82, 82, 0.55);
+  animation: hud-pulse 1s ease-in-out infinite;
+}
+.hud-timer-phase {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(12, 26, 19, 0.6);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Retícula: cruz de 4 ticks + punto (legible sobre cualquier fondo) */
+.hud-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+.hud-reticle::before,
+.hud-reticle::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  border-radius: 2px;
+}
+.hud-reticle::before {
+  /* ticks horizontales (con hueco central) */
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  -webkit-mask: linear-gradient(90deg, #000 0 8px, transparent 8px 18px, #000 18px);
+  mask: linear-gradient(90deg, #000 0 8px, transparent 8px 18px, #000 18px);
+}
+.hud-reticle::after {
+  /* ticks verticales */
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  -webkit-mask: linear-gradient(#000 0 8px, transparent 8px 18px, #000 18px);
+  mask: linear-gradient(#000 0 8px, transparent 8px 18px, #000 18px);
+}
+.hud-reticle-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+}
+
+/* Hit marker: aspa que "explota" al confirmar el servidor */
+.hud-hitmarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--danger);
+  font-size: 34px;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+  animation: hud-pop 380ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.hud-hitmarker-label {
+  position: absolute;
+  top: calc(50% + 54px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--sun);
+  font-size: 15px;
+  font-weight: 800;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  animation: hud-rise 380ms ease-out;
+}
+
+/* Munición (modo limitado) */
+.hud-ammo {
+  position: absolute;
+  top: calc(50% + 30px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 15px;
+  font-weight: 800;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+.hud-ammo--empty {
+  color: #ff8a8a;
+}
+
+/* Pila inferior central: hints + pose + barra de camuflaje */
+.hud-bottom {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud-camo {
+  width: 280px;
+  padding: 10px 14px 12px;
+  border-radius: 16px;
+  background: var(--ink);
+  border: 1px solid var(--ink-border);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+.hud-camo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hud-camo-pct {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.hud-camo-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.hud-camo-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition:
+    width 120ms linear,
+    background 120ms linear;
+}
+.hud-camo-tip {
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+  text-align: center;
+}
+
+/* Botones: pulsación 3D de juguete */
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 26px;
+  font-family: var(--hud-font);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #241a00;
+  background: linear-gradient(180deg, #ffe082, var(--sun));
+  box-shadow:
+    0 4px 0 var(--sun-deep),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    filter 120ms ease;
+}
+.hud-btn:hover {
+  filter: brightness(1.06);
+}
+.hud-btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 var(--sun-deep),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Overlays de pantalla completa (prep del Seeker · fin de ronda · atrapado) */
+.hud-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+}
+.hud-overlay--blind {
+  /* Ceguera FUNCIONAL del Seeker en PREPARATION: 100% opaco (biblia). */
+  background:
+    radial-gradient(90% 70% at 50% 38%, #13251b 0%, #0b1410 70%, #070d0a 100%);
+}
+.hud-overlay--end {
+  background: rgba(7, 13, 10, 0.82);
+}
+.hud-overlay--caught {
+  background: radial-gradient(ellipse at center, rgba(192, 32, 32, 0.12), rgba(140, 16, 16, 0.42));
+  animation: hud-fade-in 220ms ease-out;
+}
+.hud-overlay-emoji {
+  font-size: 56px;
+  animation: hud-bob 2.4s ease-in-out infinite;
+}
+.hud-overlay-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+.hud-overlay-sub {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.hud-overlay-hint {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.6;
+}
+.hud-overlay-count {
+  font-size: 44px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--sun);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+/* Zona inferior del lobby */
+.hud-lobby {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+
+@keyframes hud-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes hud-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes hud-rise {
+  from {
+    transform: translate(-50%, 8px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+@keyframes hud-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hud-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}

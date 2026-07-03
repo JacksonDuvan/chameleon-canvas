@@ -3,6 +3,9 @@
  * de Zustand (fase, resultado, conexión, host, rol, error): cambian rara vez, así que
  * es seguro re-renderizar (skill `r3f-rendering`, regla 4). NUNCA lee estado por-frame:
  * la cuenta atrás se deriva del `serverTick` con un `setInterval`, no con `useFrame`.
+ *
+ * Presentación (V1-G): sistema de chips/overlays en `globals.css` ("juguete de selva":
+ * tinta verde-bosque, amarillo-sol de marca, timer central con pulso, retícula de cruz).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
@@ -11,7 +14,7 @@ import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 
 const PHASE_LABEL: Record<string, string> = {
   lobby: 'Lobby — esperando jugadores',
-  prep: 'Preparación — ¡escóndete y camúflate!',
+  prep: '¡Escóndete y camúflate!',
   hunt: 'Caza — los Seekers buscan',
   ended: 'Ronda terminada',
 };
@@ -128,32 +131,6 @@ function useHitMarker(): boolean {
   return show;
 }
 
-const BAR: React.CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  padding: '12px 16px',
-  display: 'flex',
-  gap: 16,
-  alignItems: 'center',
-  font: '14px system-ui, sans-serif',
-  color: '#fff',
-  background: 'linear-gradient(#0009, #0000)',
-  pointerEvents: 'none',
-};
-
-const BTN: React.CSSProperties = {
-  pointerEvents: 'auto',
-  cursor: 'pointer',
-  border: 0,
-  borderRadius: 8,
-  padding: '10px 18px',
-  font: '600 15px system-ui, sans-serif',
-  color: '#0b1020',
-  background: '#ffd54a',
-};
-
 export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: () => void }) {
   const phase = useStore(worldStore, (s) => s.phase);
   const outcome = useStore(worldStore, (s) => s.outcome);
@@ -167,10 +144,7 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
   const justCaught = useJustCaught(status.caught);
   const hitMarker = useHitMarker();
 
-  const roleBadge =
-    localRole === 'seeker' ? '🔦 Eres Seeker — atrapa a los Hiders' : '🦎 Eres Hider — escóndete';
-
-  // La barra de camuflaje y el aviso de fijación son para el Hider vivo, en juego.
+  // La barra de camuflaje y la pose son para el Hider vivo, en juego.
   const showCamo = localRole === 'hider' && !status.caught && (phase === 'prep' || phase === 'hunt');
   const camoPct = Math.round(status.camo * 100);
   const seekerHunting = localRole === 'seeker' && phase === 'hunt';
@@ -178,273 +152,142 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
   const inRound = phase === 'prep' || phase === 'hunt';
 
   return (
-    <>
-      {/* Barra superior: identidad de ronda + estado */}
-      <div style={BAR}>
-        <strong>🦎 Meccha Chameleon</strong>
-        <span style={{ opacity: 0.85 }}>{PHASE_LABEL[phase] ?? phase}</span>
-        {countdown !== null && (
-          <span style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.95 }}>⏱ {countdown}s</span>
-        )}
-        {phase !== 'lobby' && <span style={{ opacity: 0.95 }}>{roleBadge}</span>}
-        <span style={{ opacity: 0.6 }}>{connected ? '● conectado' : '○ desconectado'}</span>
-        {lastError && <span style={{ color: '#ff8a8a' }}>⚠ {lastError}</span>}
-        <span style={{ marginLeft: 'auto', opacity: 0.5 }}>
-          {localRole === 'seeker'
-            ? 'WASD mover · ratón mirar · click disparar'
-            : 'WASD mover · ratón mirar · E absorber color · R pose'}
-        </span>
+    <div className="hud">
+      {/* Barra superior: identidad · timer/fase · estado */}
+      <div className="hud-top">
+        <div className="hud-cluster">
+          <span className="hud-chip hud-chip--logo">🦎 Meccha Chameleon</span>
+          {phase !== 'lobby' && (
+            <span
+              className={`hud-chip ${localRole === 'seeker' ? 'hud-chip--seeker' : 'hud-chip--hider'}`}
+            >
+              {localRole === 'seeker' ? '🔦 Seeker — atrapa' : '🦎 Hider — escóndete'}
+            </span>
+          )}
+          {lastError && <span className="hud-chip hud-chip--error">⚠ {lastError}</span>}
+        </div>
+        <div className="hud-timer">
+          {countdown !== null && (
+            <span className={`hud-timer-count${countdown <= 10 ? ' hud-timer-count--low' : ''}`}>
+              {countdown}s
+            </span>
+          )}
+          <span className="hud-timer-phase">{PHASE_LABEL[phase] ?? phase}</span>
+        </div>
+        <div className="hud-cluster hud-cluster--right">
+          <span className="hud-chip hud-chip--muted">
+            {localRole === 'seeker'
+              ? 'WASD mover · ratón mirar · click disparar'
+              : 'WASD mover · ratón mirar · E absorber · R pose'}
+          </span>
+          <span className="hud-chip hud-chip--muted">{connected ? '● conectado' : '○ desconectado'}</span>
+        </div>
       </div>
 
       {/* Overlay del Seeker en PREPARATION: no ve el mapa mientras los Hiders se esconden.
           100% OPACO (ceguera funcional, biblia): rotar la cámara no revela NADA. */}
       {seekerWaiting && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            background: '#0b1020',
-            color: '#fff',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ font: '700 26px system-ui, sans-serif' }}>🔦 Eres el Seeker</div>
-          <div style={{ font: '15px system-ui, sans-serif', opacity: 0.8 }}>
-            Los Hiders se están escondiendo… {countdown !== null ? `${countdown}s` : ''}
-          </div>
-          <div style={{ font: '13px system-ui, sans-serif', opacity: 0.6 }}>
-            Podrás moverte y disparar cuando empiece la caza
-          </div>
+        <div className="hud-overlay hud-overlay--blind">
+          <div className="hud-overlay-emoji">🔦</div>
+          <div className="hud-overlay-title">Eres el Seeker</div>
+          <div className="hud-overlay-sub">Los Hiders se están escondiendo…</div>
+          {countdown !== null && <div className="hud-overlay-count">{countdown}s</div>}
+          <div className="hud-overlay-hint">Podrás moverte y disparar cuando empiece la caza</div>
         </div>
       )}
 
       {/* Retícula central: para el Seeker (disparo) y para el Hider (punto de muestreo de E) */}
       {inRound && pointerLocked && !seekerWaiting && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: '#fff',
-            border: '1px solid #0008',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-          }}
-        />
+        <div className="hud-reticle">
+          <div className="hud-reticle-dot" />
+        </div>
       )}
 
-      {/* Hit marker del Seeker: el servidor confirmó una captura (aspa roja + aviso) */}
+      {/* Hit marker del Seeker: el servidor confirmó una captura */}
       {seekerHunting && hitMarker && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            color: '#ff5252',
-            font: '800 30px system-ui, sans-serif',
-            textShadow: '0 0 6px #000',
-            pointerEvents: 'none',
-          }}
-        >
-          ✕
-        </div>
-      )}
-      {seekerHunting && hitMarker && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(50% + 52px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            color: '#ffd54a',
-            font: '700 15px system-ui, sans-serif',
-            textShadow: '0 1px 3px #000',
-            pointerEvents: 'none',
-          }}
-        >
-          🎯 ¡Atrapado!
-        </div>
+        <>
+          <div className="hud-hitmarker">✕</div>
+          <div className="hud-hitmarker-label">🎯 ¡Atrapado!</div>
+        </>
       )}
 
       {/* Munición del Seeker: solo en el MODO de munición limitada (opción del host,
           como el original). En el juego base es ilimitada y no se muestra contador. */}
       {seekerHunting && DEFAULT_SIM_CONFIG.ammoLimitEnabled && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(50% + 28px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            color: status.ammo > 0 ? '#fff' : '#ff8a8a',
-            font: '700 16px system-ui, sans-serif',
-            textShadow: '0 1px 3px #000',
-            pointerEvents: 'none',
-          }}
-        >
+        <div className={`hud-ammo${status.ammo > 0 ? '' : ' hud-ammo--empty'}`}>
           {status.ammo > 0 ? `🔫 ${status.ammo} disparos` : '❌ sin munición'}
         </div>
       )}
 
-      {/* Hint de captura de ratón (pointer lock) durante la ronda */}
-      {inRound && !pointerLocked && !seekerWaiting && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 124,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '6px 14px',
-            borderRadius: 8,
-            background: '#000a',
-            color: '#fff',
-            font: '600 13px system-ui, sans-serif',
-            pointerEvents: 'none',
-          }}
-        >
-          🖱 Haz clic en el juego para controlar la cámara (ESC para soltar)
-        </div>
-      )}
-
-      {/* Pose actual del Hider */}
-      {showCamo && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 96,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            color: '#fff',
-            font: '600 13px system-ui, sans-serif',
-            textShadow: '0 1px 2px #000a',
-            pointerEvents: 'none',
-          }}
-        >
-          🧘 Pose: {POSE_LABEL[status.pose] ?? 'De pie'} (R para cambiar)
-        </div>
-      )}
-
-      {/* Barra de camuflaje (Hider): verde = fundido con el entorno, rojo = visible */}
-      {showCamo && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 260,
-            font: '600 13px system-ui, sans-serif',
-            color: '#fff',
-            textShadow: '0 1px 2px #000a',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span>Camuflaje</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{camoPct}%</span>
-          </div>
-          <div style={{ height: 10, borderRadius: 6, background: '#0006', overflow: 'hidden' }}>
-            <div
-              style={{
-                width: `${camoPct}%`,
-                height: '100%',
-                background: camoColor(status.camo),
-                transition: 'width 120ms linear, background 120ms linear',
-              }}
-            />
-          </div>
-          {phase === 'prep' && (
-            <div style={{ opacity: 0.7, fontWeight: 400, marginTop: 4 }}>
-              Absorbe (E) el color de tu escondite y quédate quieto para fundirte
+      {/* Pila inferior: hint de pointer lock + pose + barra de camuflaje */}
+      <div className="hud-bottom">
+        {inRound && !pointerLocked && !seekerWaiting && (
+          <span className="hud-chip">🖱 Haz clic en el juego para controlar la cámara (ESC suelta)</span>
+        )}
+        {showCamo && (
+          <span className="hud-chip hud-chip--muted">
+            🧘 Pose: {POSE_LABEL[status.pose] ?? 'De pie'} — R para cambiar
+          </span>
+        )}
+        {showCamo && (
+          <div className="hud-camo">
+            <div className="hud-camo-head">
+              <span>Camuflaje</span>
+              <span className="hud-camo-pct">{camoPct}%</span>
             </div>
-          )}
-        </div>
-      )}
+            <div className="hud-camo-track">
+              <div
+                className="hud-camo-fill"
+                style={{ width: `${camoPct}%`, background: camoColor(status.camo) }}
+              />
+            </div>
+            {phase === 'prep' && (
+              <div className="hud-camo-tip">Absorbe (E) el color de tu escondite y quédate quieto</div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Destello al ser atrapado */}
       {justCaught && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#c0202033',
-            color: '#fff',
-            font: '800 30px system-ui, sans-serif',
-            textShadow: '0 2px 8px #000',
-            pointerEvents: 'none',
-          }}
-        >
-          ¡Atrapado! Ahora eres Seeker 🔦
+        <div className="hud-overlay hud-overlay--caught">
+          <div className="hud-overlay-title">¡Atrapado! Ahora eres Seeker 🔦</div>
         </div>
       )}
 
       {/* Botón Empezar (solo el host, en Lobby) */}
       {phase === 'lobby' && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 28,
-            left: 0,
-            right: 0,
-            textAlign: 'center',
-            pointerEvents: 'none',
-          }}
-        >
+        <div className="hud-lobby">
           {isHost ? (
-            <button type="button" onClick={onStart} style={BTN}>
+            <button type="button" onClick={onStart} className="hud-btn">
               ▶ Empezar partida
             </button>
           ) : (
-            <span style={{ color: '#fff', opacity: 0.75, font: '14px system-ui' }}>
-              esperando a que el host inicie la partida…
-            </span>
+            <span className="hud-chip hud-chip--muted">esperando a que el host inicie la partida…</span>
           )}
         </div>
       )}
 
       {/* Panel central de fin de ronda + "Jugar otra vez" */}
       {phase === 'ended' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 18,
-            color: '#fff',
-            background: '#0008',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ font: '700 28px system-ui, sans-serif' }}>
+        <div className="hud-overlay hud-overlay--end">
+          <div className="hud-overlay-emoji">{outcome === 'hiders' ? '🦎' : outcome === 'seekers' ? '🔦' : '🏁'}</div>
+          <div className="hud-overlay-title">
             {outcome === 'hiders'
-              ? '🦎 ¡Ganan los Hiders! Sobrevivió al menos uno.'
+              ? '¡Ganan los Hiders! Sobrevivió al menos uno.'
               : outcome === 'seekers'
-                ? '🔦 ¡Ganan los Seekers! Cayeron todos los Hiders.'
+                ? '¡Ganan los Seekers! Cayeron todos los Hiders.'
                 : 'Ronda terminada'}
           </div>
           {isHost ? (
-            <button type="button" onClick={onRestart} style={BTN}>
+            <button type="button" onClick={onRestart} className="hud-btn">
               ↻ Jugar otra vez
             </button>
           ) : (
-            <span style={{ opacity: 0.75 }}>esperando a que el host reinicie…</span>
+            <span className="hud-overlay-sub">esperando a que el host reinicie…</span>
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
