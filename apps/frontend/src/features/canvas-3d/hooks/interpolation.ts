@@ -49,3 +49,26 @@ export function sampleRemote(buffer: RemoteSnapshot[], renderTime: number, out: 
     }
   }
 }
+
+/**
+ * Suavizado visual del jugador LOCAL. La predicción escribe `pos` a tick rate (30 Hz);
+ * dibujarla cruda a 60–144 fps hace que el avatar "tiemble" al caminar en 3ª persona
+ * (bug del playtest; el Seeker no lo nota porque en FPP no se ve a sí mismo).
+ * Interpola linealmente prev→curr según el tiempo desde la última predicción
+ * (`predAt`), con clamp a [0,1]: NUNCA extrapola (un input tardío solo retiene el
+ * avatar donde está). Muta `out` (sin asignar; se llama por frame).
+ */
+export function sampleLocalMut(
+  prev: Readonly<{ x: number; y: number; z: number }>,
+  curr: Readonly<{ x: number; y: number; z: number }>,
+  predAt: number,
+  now: number,
+  tickMs: number,
+  out: { x: number; y: number; z: number }, // estructural: vale Vec3 del sim o THREE.Vector3
+): void {
+  const raw = tickMs > 0 ? (now - predAt) / tickMs : 1;
+  const t = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+  out.x = prev.x + (curr.x - prev.x) * t;
+  out.y = prev.y + (curr.y - prev.y) * t;
+  out.z = prev.z + (curr.z - prev.z) * t;
+}

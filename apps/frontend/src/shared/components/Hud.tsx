@@ -96,6 +96,33 @@ function useLocalStatus(): LocalStatus {
 
 const POSE_LABEL = ['De pie', 'Agachado', 'Bola', 'Plano (pared)'];
 
+/**
+ * Hiders vivos/atrapados (feedback de captura para TODOS, como la fila de muñecos del
+ * original). Derivado del estado rápido vía `getState()` + interval (nunca por frame);
+ * bail-out si no cambió. Cuenta al local + remotos: atrapado = fue Hider y cayó.
+ */
+function useHidersCount(): { alive: number; caught: number } {
+  const [v, setV] = useState({ alive: 0, caught: 0 });
+  useEffect(() => {
+    const compute = (): void => {
+      const st = worldStore.getState();
+      let alive = 0;
+      let caught = 0;
+      if (st.local.caught) caught++;
+      else if (st.local.role === 'hider') alive++;
+      for (const e of st.remotes.values()) {
+        if (e.caught) caught++;
+        else if (e.role === 'hider') alive++;
+      }
+      setV((prev) => (prev.alive === alive && prev.caught === caught ? prev : { alive, caught }));
+    };
+    compute();
+    const id = setInterval(compute, 250);
+    return () => clearInterval(id);
+  }, []);
+  return v;
+}
+
 /** Destello transitorio cuando el jugador local acaba de ser atrapado (false→true). */
 function useJustCaught(caught: boolean): boolean {
   const [flash, setFlash] = useState(false);
@@ -143,6 +170,7 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
   const status = useLocalStatus();
   const justCaught = useJustCaught(status.caught);
   const hitMarker = useHitMarker();
+  const hiders = useHidersCount();
 
   // La barra de camuflaje y la pose son para el Hider vivo, en juego.
   const showCamo = localRole === 'hider' && !status.caught && (phase === 'prep' || phase === 'hunt');
@@ -162,6 +190,12 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
               className={`hud-chip ${localRole === 'seeker' ? 'hud-chip--seeker' : 'hud-chip--hider'}`}
             >
               {localRole === 'seeker' ? '🔦 Seeker — atrapa' : '🦎 Hider — escóndete'}
+            </span>
+          )}
+          {inRound && (
+            <span className="hud-chip">
+              🦎 quedan {hiders.alive}
+              {hiders.caught > 0 ? ` · ✕ ${hiders.caught}` : ''}
             </span>
           )}
           {lastError && <span className="hud-chip hud-chip--error">⚠ {lastError}</span>}

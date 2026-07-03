@@ -36,11 +36,20 @@ export interface RemoteEntity {
   pose: number; // pose del avatar 0..3 (V1-B)
   aimX: number; // apunte horizontal (para orientar el avatar remoto)
   aimZ: number;
+  // ── Caminata (solo presentación; lo muta useFrame): bamboleo de juguete ──
+  wobblePhase: number; // fase acumulada del bamboleo
+  wobbleAmp: number; // amplitud suavizada 0..1 (≈ velocidad/maxSpeed)
+  prevRX: number; // render.x del frame anterior (para estimar velocidad)
+  prevRZ: number;
 }
 
 export interface WorldStoreState {
   // ── RÁPIDO (tick rate; leer solo desde useFrame) ──
   readonly local: PlayerState; // jugador local PREDICHO
+  /** Pos del local ANTES del último predict (para el suavizado visual entre ticks:
+   *  la sim va a 30 Hz y el render a 60+; sin esto el avatar "tiembla" al caminar). */
+  readonly localPrevPos: Vec3;
+  localPredAt: number; // ms (performance.now del último predict)
   readonly remotes: Map<string, RemoteEntity>;
   localPlayerId: string | null;
   serverTick: number;
@@ -58,6 +67,8 @@ export interface WorldStoreState {
 
 export const worldStore = createStore<WorldStoreState>(() => ({
   local: new PlayerState('local'),
+  localPrevPos: new Vec3(),
+  localPredAt: 0,
   remotes: new Map(),
   localPlayerId: null,
   serverTick: 0,

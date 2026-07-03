@@ -9,7 +9,12 @@
 import { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
+import { sampleLocalMut } from '../hooks/interpolation';
+
+const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
+const _lp = new THREE.Vector3();
 
 export function LocalMarker() {
   const ref = useRef<THREE.Mesh>(null!);
@@ -26,7 +31,9 @@ export function LocalMarker() {
     // En primera persona (Seeker en Hunt) el marcador estorbaría sobre la cámara.
     m.visible = !(st.local.role === 'seeker' && st.phase === 'hunt');
     if (!m.visible) return;
-    const lp = st.local.pos;
+    // Misma pos suavizada que el avatar (si no, la flecha vibraría respecto a él).
+    sampleLocalMut(st.localPrevPos, st.local.pos, st.localPredAt, performance.now(), TICK_MS, _lp);
+    const lp = _lp;
     const bob = Math.sin(state.clock.elapsedTime * 3) * 0.08;
     m.position.set(lp.x, lp.y + 2.3 + bob, lp.z);
     m.rotation.y = state.clock.elapsedTime * 1.5;

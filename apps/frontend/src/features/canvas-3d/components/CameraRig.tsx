@@ -12,8 +12,12 @@
  */
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { lookState } from '../hooks/useMouseLook';
+import { sampleLocalMut } from '../hooks/interpolation';
+
+const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
 
 const EYE_HEIGHT = 1.5; // = SimConfig.eyeHeight (origen del rayo de captura)
 const TP_DIST = 5.5; // distancia de la cámara en tercera persona
@@ -25,12 +29,16 @@ const FOV_TP = 60; // tercera persona / vistas generales
 const _target = new THREE.Vector3();
 const _desired = new THREE.Vector3();
 const _lookDir = new THREE.Vector3();
+const _lp = new THREE.Vector3(); // pos local SUAVIZADA entre ticks (sin temblor)
 
 export function CameraRig() {
   const camera = useThree((s) => s.camera);
   useFrame((_, delta) => {
     const st = worldStore.getState();
-    const lp = st.local.pos;
+    // La cámara sigue la MISMA pos suavizada que dibuja MechaMesh (sim a 30 Hz,
+    // render a 60+): sin esto el mundo/avatar "tiembla" al caminar.
+    sampleLocalMut(st.localPrevPos, st.local.pos, st.localPredAt, performance.now(), TICK_MS, _lp);
+    const lp = _lp;
     const phase = st.phase;
     const isSeeker = st.local.role === 'seeker';
 

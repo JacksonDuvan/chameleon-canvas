@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sampleRemote, pushRemoteSnapshot, MAX_REMOTE_BUFFER } from './interpolation';
+import { sampleRemote, sampleLocalMut, pushRemoteSnapshot, MAX_REMOTE_BUFFER } from './interpolation';
 import { Vec3 } from '@mecha/sim';
 import type { RemoteSnapshot } from '../store/worldStore';
 
@@ -53,5 +53,33 @@ describe('pushRemoteSnapshot', () => {
     for (let i = 0; i < MAX_REMOTE_BUFFER + 5; i++) pushRemoteSnapshot(buffer, snap(i, i));
     expect(buffer.length).toBe(MAX_REMOTE_BUFFER);
     expect(buffer[0]!.recvAt).toBe(5); // los 5 primeros se descartaron
+  });
+});
+
+describe('sampleLocalMut — suavizado visual del jugador local (bug del temblor)', () => {
+  // La predicción escribe pos a 30 Hz; el render (60-144 fps) la dibujaba cruda y el
+  // avatar "temblaba" en 3ª persona. Se interpola prev→curr por el tiempo desde el tick.
+  const prev = new Vec3(0, 0, 0);
+  const curr = new Vec3(2, 0, -4);
+
+  it('a mitad del tick devuelve el punto medio', () => {
+    const out = new Vec3();
+    sampleLocalMut(prev, curr, 1000, 1016.5, 33, out);
+    expect(out.x).toBeCloseTo(1, 9);
+    expect(out.z).toBeCloseTo(-2, 9);
+  });
+
+  it('clampa en ambos extremos (nunca extrapola)', () => {
+    const out = new Vec3();
+    sampleLocalMut(prev, curr, 1000, 990, 33, out); // antes del tick → prev
+    expect(out.x).toBe(0);
+    sampleLocalMut(prev, curr, 1000, 1200, 33, out); // input tardío → curr, sin pasarse
+    expect(out.x).toBe(2);
+  });
+
+  it('con tickMs 0 devuelve la posición actual', () => {
+    const out = new Vec3();
+    sampleLocalMut(prev, curr, 1000, 1000, 0, out);
+    expect(out.x).toBe(2);
   });
 });

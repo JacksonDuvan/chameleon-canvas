@@ -136,6 +136,34 @@ describe('step — movimiento y anti-trampas', () => {
   });
 });
 
+describe('step — fin instantáneo de la caza (feedback del playtest)', () => {
+  it('al caer el ÚLTIMO Hider la ronda termina AL INSTANTE (no se espera el timer)', () => {
+    const w = worldInPhase('hunt', [
+      { id: 's', role: 'seeker', x: 0 },
+      { id: 'h', role: 'hider', x: 2, frozen: true },
+    ]);
+    w.phaseEndsAtTick = w.tick + 1000; // al temporizador aún le quedaba cuerda
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h')!.caught).toBe(true);
+    expect(w.phase).toBe('ended');
+    expect(w.outcome).toBe('seekers');
+    expect(w.phaseEndsAtTick).toBe(0);
+  });
+
+  it('si aún queda un Hider vivo, la caza CONTINÚA', () => {
+    const w = worldInPhase('hunt', [
+      { id: 's', role: 'seeker', x: 0 },
+      { id: 'h1', role: 'hider', x: 2, frozen: true },
+      { id: 'h2', role: 'hider', x: 0, z: 10, frozen: true }, // fuera de la línea de tiro
+    ]);
+    w.phaseEndsAtTick = w.tick + 1000;
+    shoot(w, 's', MAP_VISIBLE);
+    expect(w.players.get('h1')!.caught).toBe(true);
+    expect(w.players.get('h2')!.caught).toBe(false);
+    expect(w.phase).toBe('hunt');
+  });
+});
+
 describe('step — disparos (modelo del original: tag por impacto)', () => {
   it('un disparo certero atrapa al Hider AL INSTANTE (pasa a Seeker con munición)', () => {
     const w = worldInPhase('hunt', [

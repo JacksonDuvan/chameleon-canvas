@@ -159,15 +159,17 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/09-v1-scope.md`](docs/09-v1-scope.md) — **🎯 CHARTER DE V1 (objetivo de lanzamiento)**: qué se lanza (clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**, pero **esconderse REAL innegociable**). Es el filtro de "¿en qué trabajo?". Léelo antes de elegir tarea.
 - [`docs/10-step-7-hiding-core.md`](docs/10-step-7-hiding-core.md) — **núcleo de esconderse de V1 (V1-A/B/C)**: oclusión + colisión del escenario (mapa denso con cobertura), poses con hitbox propio, Seeker FPP con mouse-look (wire v3: aimY+pose+lockProgress).
 - [`docs/11-step-8-visual-pass.md`](docs/11-step-8-visual-pass.md) — **pass visual V1-G**: cielo+sol+PCSS (drei), flat-shading low-poly, avatar por pose (geometrías fusionadas, testeadas contra el hitbox del server), horizonte decorativo `noSample`, HUD "juguete de selva", FOV dinámico. Sin dependencias nuevas ni `.glb`.
-- [`docs/12-step-9-pueblo-decoys.md`](docs/12-step-9-pueblo-decoys.md) — **V1-G v2 (post-playtest)**: avatar = MUÑECO liso del original (4 poses fieles), mapa `pueblo-01` 48×48 (casas/barrios/plaza), **señuelos `figure`/`figureWall`** renderizados con la geometría del avatar (mimetismo real: la tesis "te escondes entre cosas que se parecen a ti"), viewmodel del arma, prep 45 s / hunt 120 s.
+- [`docs/12-step-9-pueblo-decoys.md`](docs/12-step-9-pueblo-decoys.md) — **V1-G v2 (post-playtest)**: avatar = MUÑECO liso del original (4 poses fieles), mapa `pueblo-01` 48×48 (casas/barrios/plaza), **señuelos `figure`/`figureWall`** renderizados con la geometría del avatar (mimetismo real: la tesis "te escondes entre cosas que se parecen a ti"), viewmodel del arma.
+- [`docs/13-step-10-round2-feedback.md`](docs/13-step-10-round2-feedback.md) — **2ª ronda de playtest**: FIN INSTANTÁNEO al caer el último Hider (TDD), fix del BUG del temblor (sim 30 Hz vs render 60+: `sampleLocalMut` suaviza al local en MechaMesh/CameraRig/LocalMarker), caminata con bamboleo por instancia, miniciudad (+4 casas, test ≥16 muros), contador de Hiders en HUD, prep 60 s. Hooks E2E dev-only (`window.__world`/`__look`).
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
 ciclo jugable + claridad + robustez de salas · Paso 6 ✅ núcleo de camuflaje (P0.1→P0.3,
 `docs/08`) · Paso 7 ✅ núcleo de esconderse de V1 (V1-A/B/C + disparos del 7.5; wire
-v4, `docs/10`) · Paso 8 ✅ pass visual V1-G (`docs/11`) · **Paso 9 ✅ V1-G v2
-post-playtest: muñeco del original + pueblo 48×48 + señuelos figure/figureWall +
-viewmodel del arma — ver `docs/12`**.
+v4, `docs/10`) · Paso 8 ✅ pass visual V1-G (`docs/11`) · Paso 9 ✅ V1-G v2: muñeco
+del original + pueblo 48×48 + señuelos (`docs/12`) · **Paso 10 ✅ 2ª ronda de
+playtest: fin instantáneo, fix del temblor, caminata, miniciudad, contador de Hiders
+— ver `docs/13`**.
 **Ya se puede esconder ENTRE cosas que se parecen a ti** (señuelos con la geometría
 del avatar), pendiente del veredicto del playtest. **El objetivo es lanzar una V1**:
 clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**.

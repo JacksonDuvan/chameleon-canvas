@@ -141,6 +141,13 @@ describe('DEFAULT_MAP v2 — pueblo (feedback del playtest: mapa grande + mimeti
     for (const z of [...figures, ...wallFigures]) expect(isSolidZone(z)).toBe(true);
   });
 
+  it('es una MINICIUDAD: suficientes muros para formar varias casas (≥16 tramos)', () => {
+    // 4 perimetrales + ≥12 tramos de casas/cobertizos (feedback del playtest:
+    // "quisiera que hubiera casas, una especie de miniciudad").
+    const walls = DEFAULT_MAP.zones.filter((z) => z.kind === 'wall');
+    expect(walls.length).toBeGreaterThanOrEqual(16);
+  });
+
   it('ofrece variedad real de superficies: ≥8 colores distintos', () => {
     const colors = new Set<number>([DEFAULT_MAP.floorColor]);
     for (const z of DEFAULT_MAP.zones) colors.add(z.color);

@@ -39,7 +39,8 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   playerRadius: 0.5,
   eyeHeight: 1.5,
   // Pueblo 48×48 (mapa v2): más terreno que recorrer para esconderse y para barrer.
-  prepDurationTicks: HZ * 45, // 45 s
+  // Prep 60 s: feedback del playtest ("agrega más tiempo a los Hiders para esconderse").
+  prepDurationTicks: HZ * 60, // 60 s
   huntDurationTicks: HZ * 120, // 120 s
   colorLockTicks: HZ * 1, // 1 s
   // DEBE coincidir con DEFAULT_MAP.bounds (una sola verdad efectiva; test lo fuerza).

@@ -1,31 +1,55 @@
 /**
  * Players — render de TODOS los avatares con UN `InstancedMesh` POR POSE (V1-B):
- * silueta de CAMALEÓN low-poly por pose (`avatarGeometry`, V1-G) — de pie, agachado,
- * bola y plano-pared. 4 draw calls como máximo; cada jugador se escribe en la malla
- * de su pose y se ORIENTA por su yaw (derivado del apunte) — girar para encajar.
+ * el muñeco del original (`avatarGeometry`) — de pie, arrodillado, bola y plano.
+ * 4 draw calls como máximo; cada jugador se escribe en la malla de su pose y se
+ * ORIENTA por su yaw (derivado del apunte) — girar para encajar.
  *
  * El jugador local NO se dibuja cuando está en primera persona (Seeker en HUNT):
  * la cámara está dentro de su cuerpo.
  *
+ * Suavizado y caminata (post-playtest):
+ *  - El local se dibuja INTERPOLADO entre su pos del tick anterior y la predicha
+ *    (`sampleLocalMut`): la sim va a 30 Hz y el render a 60+ — sin esto "temblaba".
+ *  - Bamboleo de juguete al CAMINAR (de pie/arrodillado): balanceo lateral + bote,
+ *    con amplitud proporcional a la velocidad estimada. Solo presentación.
+ *
  * Skill `r3f-rendering`: cero `setState` por frame; en `useFrame` se MUTAN matrices/
  * colores de instancia leyendo `worldStore` vía `getState()`; geometrías y material
- * memoizados; scratch de módulo (sin asignar por frame). El local usa su posición
- * PREDICHA; los remotos se INTERPOLAN en el pasado.
+ * memoizados; scratch de módulo (sin asignar por frame). Los remotos se INTERPOLAN
+ * en el pasado.
  */
 import { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { POSE_COUNT } from '@mecha/sim';
+import { DEFAULT_SIM_CONFIG, POSE_COUNT, POSE_CROUCH, POSE_STAND } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
-import { sampleRemote, INTERP_DELAY_MS } from '../hooks/interpolation';
+import { sampleRemote, sampleLocalMut, INTERP_DELAY_MS } from '../hooks/interpolation';
 import { buildPoseGeometries } from './avatarGeometry';
 
 const MAX_PLAYERS = 16;
+const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
+const MAX_SPEED = DEFAULT_SIM_CONFIG.maxSpeed;
+const WOBBLE_FREQ = 10; // rad/s de balanceo al caminar
+const WOBBLE_ROLL = 0.14; // rad de inclinación lateral máxima
+const WOBBLE_BOB = 0.05; // m de bote vertical máximo
 
 // Scratch de ámbito de módulo: el render es monohilo y `useFrame` es síncrono.
 const _obj = new THREE.Object3D();
 const _color = new THREE.Color();
 const _counts = new Int32Array(POSE_COUNT);
+const _localPos = new THREE.Vector3();
+// Estado de caminata del LOCAL (presentación pura; persiste entre frames).
+let _localPrevX = 0;
+let _localPrevZ = 0;
+let _localAmp = 0;
+let _localPhase = 0;
+let _localInit = false;
+
+/** Avanza fase/amplitud de bamboleo según la distancia recorrida este frame. */
+function advanceWobble(dist: number, dt: number, amp: number): number {
+  const target = dt > 0 ? Math.min(1, dist / dt / MAX_SPEED) : 0;
+  return amp + (target - amp) * Math.min(1, dt * 12);
+}
 
 export function Players() {
   const refs = useRef<Array<THREE.InstancedMesh | null>>([null, null, null, null]);
@@ -36,10 +60,12 @@ export function Players() {
   const geometries = useMemo(() => buildPoseGeometries(), []);
   const material = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.8 }), []);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.1);
     const meshes = refs.current;
     const st = worldStore.getState();
-    const renderTime = performance.now() - INTERP_DELAY_MS;
+    const now = performance.now();
+    const renderTime = now - INTERP_DELAY_MS;
     _counts.fill(0);
 
     const writeAvatar = (
@@ -50,13 +76,22 @@ export function Players() {
       aimX: number,
       aimZ: number,
       colorHex: number,
+      wobblePhase: number,
+      wobbleAmp: number,
     ): void => {
       const pi = pose & 3;
       const mesh = meshes[pi];
       if (!mesh || _counts[pi]! >= MAX_PLAYERS) return;
       const i = _counts[pi]!;
-      _obj.position.set(x, y, z);
-      _obj.rotation.y = Math.atan2(aimX, aimZ); // orientado por el apunte (yaw)
+      // Bamboleo de caminata: solo poses "a pie" (la bola y el plano no caminan así).
+      const wobbles = (pi === POSE_STAND || pi === POSE_CROUCH) && wobbleAmp > 0.02;
+      const bob = wobbles ? Math.abs(Math.sin(wobblePhase)) * WOBBLE_BOB * wobbleAmp : 0;
+      _obj.position.set(x, y + bob, z);
+      _obj.rotation.set(
+        0,
+        Math.atan2(aimX, aimZ), // orientado por el apunte (yaw)
+        wobbles ? Math.sin(wobblePhase) * WOBBLE_ROLL * wobbleAmp : 0,
+      );
       _obj.updateMatrix();
       mesh.setMatrixAt(i, _obj.matrix);
       _color.setHex(colorHex, THREE.SRGBColorSpace);
@@ -64,24 +99,43 @@ export function Players() {
       _counts[pi] = i + 1;
     };
 
-    // Jugador local: posición PREDICHA. Oculto en primera persona (Seeker en Hunt).
+    // Jugador local: pos predicha SUAVIZADA entre ticks (bug del temblor). Oculto en
+    // primera persona (Seeker en Hunt): la cámara está dentro de su cuerpo.
     const fpp = st.local.role === 'seeker' && st.phase === 'hunt';
+    sampleLocalMut(st.localPrevPos, st.local.pos, st.localPredAt, now, TICK_MS, _localPos);
+    if (!_localInit) {
+      _localPrevX = _localPos.x;
+      _localPrevZ = _localPos.z;
+      _localInit = true;
+    }
+    const ldist = Math.hypot(_localPos.x - _localPrevX, _localPos.z - _localPrevZ);
+    _localAmp = advanceWobble(ldist, dt, _localAmp);
+    if (_localAmp > 0.02) _localPhase += dt * WOBBLE_FREQ * (0.5 + _localAmp * 0.5);
+    _localPrevX = _localPos.x;
+    _localPrevZ = _localPos.z;
     if (!fpp) {
       const lc = st.local.color;
       writeAvatar(
         st.local.pose,
-        st.local.pos.x,
-        st.local.pos.y,
-        st.local.pos.z,
+        _localPos.x,
+        _localPos.y,
+        _localPos.z,
         st.local.aimX,
         st.local.aimZ,
         ((lc.r & 0xff) << 16) | ((lc.g & 0xff) << 8) | (lc.b & 0xff),
+        _localPhase,
+        _localAmp,
       );
     }
 
-    // Remotos: INTERPOLADOS en el pasado (suave entre ticks de red).
+    // Remotos: INTERPOLADOS en el pasado (suave entre ticks de red) + su bamboleo.
     for (const e of st.remotes.values()) {
       sampleRemote(e.buffer, renderTime, e.render);
+      const dist = Math.hypot(e.render.x - e.prevRX, e.render.z - e.prevRZ);
+      e.wobbleAmp = advanceWobble(dist, dt, e.wobbleAmp);
+      if (e.wobbleAmp > 0.02) e.wobblePhase += dt * WOBBLE_FREQ * (0.5 + e.wobbleAmp * 0.5);
+      e.prevRX = e.render.x;
+      e.prevRZ = e.render.z;
       writeAvatar(
         e.pose,
         e.render.x,
@@ -90,6 +144,8 @@ export function Players() {
         e.aimX,
         e.aimZ,
         (e.colorPacked >>> 8) & 0xffffff,
+        e.wobblePhase,
+        e.wobbleAmp,
       );
     }
 

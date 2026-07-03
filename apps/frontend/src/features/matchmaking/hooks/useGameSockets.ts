@@ -116,6 +116,10 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
         pose: p.pose,
         aimX: p.aimX,
         aimZ: p.aimZ,
+        wobblePhase: 0,
+        wobbleAmp: 0,
+        prevRX: p.x,
+        prevRZ: p.z,
       };
       st.remotes.set(p.id, e);
     }
@@ -218,6 +222,10 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
     const cmd: UserCommand = { seq, playerId: st.localPlayerId ?? 'local', ...intent };
     const input: PendingInput = { seq, cmd, dt: DT };
 
+    // Suavizado visual entre ticks: recuerda la pos ANTES de predecir y estampa el
+    // momento — el render interpola prev→pos (sampleLocalMut) para no "temblar".
+    st.localPrevPos.setMut(st.local.pos.x, st.local.pos.y, st.local.pos.z);
+    st.localPredAt = performance.now();
     // Predicción local inmediata + buffer de inputs pendientes (para reconciliar).
     predict(st.local, input, st.phase, DEFAULT_SIM_CONFIG);
     if (pendingRef.current.length >= MAX_PENDING_INPUTS) pendingRef.current.shift(); // cota

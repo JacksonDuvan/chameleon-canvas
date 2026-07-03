@@ -8,12 +8,13 @@ import { ClientOnly, createFileRoute } from '@tanstack/react-router';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from '@/features/canvas-3d/components/Scene';
 import { useRaycastColor } from '@/features/canvas-3d/hooks/useRaycastColor';
-import { useMouseLook } from '@/features/canvas-3d/hooks/useMouseLook';
+import { useMouseLook, lookState } from '@/features/canvas-3d/hooks/useMouseLook';
 import {
   useGameSockets,
   type GameSockets,
 } from '@/features/matchmaking/hooks/useGameSockets';
 import { useLocalInput } from '@/features/matchmaking/hooks/useLocalInput';
+import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { Hud } from '@/shared/components/Hud';
 
 export const Route = createFileRoute('/')({ component: Home });
@@ -60,5 +61,13 @@ function Game() {
 function Controles({ sockets }: { sockets: GameSockets }) {
   useRaycastColor(sockets.sendControl);
   useMouseLook();
+  // SOLO en dev: expone store + mouse-look para las verificaciones E2E headless
+  // (leer estado real / apuntar sin pointer lock, que es flaky en headless).
+  // Nunca llega al build de producción.
+  if (import.meta.env.DEV) {
+    const w = window as unknown as Record<string, unknown>;
+    w.__world = worldStore;
+    w.__look = lookState;
+  }
   return null;
 }

@@ -205,6 +205,26 @@ export const DEFAULT_MAP: MapData = {
     { id: 'se-ball-2', kind: 'prop', minX: 20.2, maxX: 21.4, minZ: 20, maxZ: 21.2, y: 0.6, height: 1.2, color: rgb(0x55688c), roughness: 0.9, metalness: 0, shape: 'sphere' },
     { id: 'se-barrel', kind: 'prop', minX: 19.8, maxX: 21, minZ: 12.4, maxZ: 13.6, y: 0.7, height: 1.4, color: rgb(0x4a5a7a), roughness: 0.8, metalness: 0.15, shape: 'cylinder' },
 
+    // ── Miniciudad (v3, feedback del playtest): más casas/cobertizos por barrio ──
+    // NW-2 · Cabaña salmón (oeste; abre al este y al sur)
+    { id: 'nw2-back', kind: 'wall', minX: -21, maxX: -20.4, minZ: -8, maxZ: -3.6, y: 1.3, height: 2.6, color: rgb(0xd98c7a), roughness: 0.9, metalness: 0 },
+    { id: 'nw2-top', kind: 'wall', minX: -21, maxX: -15, minZ: -8, maxZ: -7.4, y: 1.3, height: 2.6, color: rgb(0xd98c7a), roughness: 0.9, metalness: 0 },
+    { id: 'nw2-bottom', kind: 'wall', minX: -21, maxX: -18, minZ: -4.2, maxZ: -3.6, y: 1.3, height: 2.6, color: rgb(0xd98c7a), roughness: 0.9, metalness: 0 },
+    { id: 'nw2-statue', kind: 'prop', minX: -19.4, maxX: -18.5, minZ: -6.6, maxZ: -5.7, y: 0.85, height: 1.7, color: rgb(0xd98c7a), roughness: 0.9, metalness: 0, shape: 'figure', rot: 1 },
+    // NE-2 · Cabaña esquina (usa el perímetro como dos lados; abre al sur-oeste)
+    { id: 'ne2-south', kind: 'wall', minX: 19, maxX: 23, minZ: -18.6, maxZ: -18, y: 1.3, height: 2.6, color: rgb(0xbfd9d9), roughness: 0.9, metalness: 0 },
+    { id: 'ne2-west', kind: 'wall', minX: 19, maxX: 19.6, minZ: -23, maxZ: -21, y: 1.3, height: 2.6, color: rgb(0xbfd9d9), roughness: 0.9, metalness: 0 },
+    { id: 'ne2-cookie', kind: 'prop', minX: 19.6, maxX: 19.9, minZ: -22.6, maxZ: -21.7, y: 1.25, height: 1.5, color: rgb(0x2f6b6b), roughness: 0.9, metalness: 0, shape: 'figureWall', rot: 1 },
+    // SW-2 · Cabaña mostaza pálida (sur; abre al oeste)
+    { id: 'sw2-back', kind: 'wall', minX: -15, maxX: -9, minZ: 21.4, maxZ: 22, y: 1.3, height: 2.6, color: rgb(0xd7b45a), roughness: 0.9, metalness: 0 },
+    { id: 'sw2-east', kind: 'wall', minX: -9.6, maxX: -9, minZ: 17, maxZ: 21.4, y: 1.3, height: 2.6, color: rgb(0xd7b45a), roughness: 0.9, metalness: 0 },
+    { id: 'sw2-top', kind: 'wall', minX: -15, maxX: -12.6, minZ: 17, maxZ: 17.6, y: 1.3, height: 2.6, color: rgb(0xd7b45a), roughness: 0.9, metalness: 0 },
+    { id: 'sw2-cookie', kind: 'prop', minX: -9.9, maxX: -9.6, minZ: 18.2, maxZ: 19.1, y: 1.25, height: 1.5, color: rgb(0x6b4a2b), roughness: 0.9, metalness: 0, shape: 'figureWall', rot: 3 },
+    // SE-2 · Cobertizo en L (abre al sur)
+    { id: 'se2-north', kind: 'wall', minX: 17, maxX: 22, minZ: 3.5, maxZ: 4.1, y: 1.3, height: 2.6, color: rgb(0x8a9bbf), roughness: 0.9, metalness: 0 },
+    { id: 'se2-west', kind: 'wall', minX: 17, maxX: 17.6, minZ: 4.1, maxZ: 8, y: 1.3, height: 2.6, color: rgb(0x8a9bbf), roughness: 0.9, metalness: 0 },
+    { id: 'se2-statue', kind: 'prop', minX: 19.2, maxX: 20.1, minZ: 5.4, maxZ: 6.3, y: 0.85, height: 1.7, color: rgb(0x3a4a6b), roughness: 0.9, metalness: 0, shape: 'figure', rot: 3 },
+
     // ── Plaza y calles: jardineras en las esquinas de la plaza + tráfico de props ──
     { id: 'plaza-planter-1', kind: 'prop', minX: -7.4, maxX: -6.2, minZ: -7.4, maxZ: -6.2, y: 0.55, height: 1.1, color: rgb(0x3f6b3a), roughness: 0.95, metalness: 0, shape: 'cylinder' },
     { id: 'plaza-planter-2', kind: 'prop', minX: 6.2, maxX: 7.4, minZ: -7.4, maxZ: -6.2, y: 0.55, height: 1.1, color: rgb(0x356032), roughness: 0.95, metalness: 0, shape: 'cylinder' },

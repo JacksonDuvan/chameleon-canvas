@@ -130,6 +130,14 @@ export function step(
       }
     }
 
+    // Cayó el ÚLTIMO Hider ⇒ la ronda termina AL INSTANTE (como el original: no se
+    // espera el temporizador cuando ya no queda nadie a quien buscar).
+    if (world.phase === 'hunt' && !anyHiderAlive(world)) {
+      world.phase = 'ended';
+      world.phaseEndsAtTick = 0;
+      world.outcome = 'seekers';
+    }
+
     // Modo limitado: si NINGÚN Seeker conserva munición, los Hiders ganan al instante.
     if (cfg.ammoLimitEnabled && world.phase === 'hunt') {
       let anyAmmo = false;
