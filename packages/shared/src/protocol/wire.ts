@@ -25,7 +25,9 @@ import type { UserCommand } from './commands';
 // v4 (modelo de DISPAROS del original, post-playtest): fuera beingWatched y
 // lockProgress; entra `ammo` (u8, munición restante del Seeker). El bit 3 de roleFlags
 // queda RESERVADO. Cliente y servidor despliegan juntos (monorepo).
-export const PROTOCOL_VERSION = 4;
+// v5 (mapa ALEATORIO por ronda): el header lleva `mapSeed` (u32); cliente y servidor
+// generan el MISMO mapa con `generateMap(mapSeed)` — el mapa no viaja entero.
+export const PROTOCOL_VERSION = 5;
 export const MAX_SNAPSHOT_BYTES = 8192;
 export const MAX_INPUT_BYTES = 64;
 
@@ -64,6 +66,7 @@ export interface WireWorld {
   readonly tick: number;
   readonly phase: GamePhase;
   readonly outcome: Outcome;
+  readonly mapSeed: number; // semilla del mapa de la ronda (v5; generateMap)
   readonly players: ReadonlyMap<string, WirePlayer>;
 }
 
@@ -92,6 +95,7 @@ export interface DecodedSnapshot {
   tick: number;
   phase: GamePhase;
   outcome: Outcome;
+  mapSeed: number; // semilla del mapa de la ronda (v5)
   players: DecodedPlayer[];
 }
 
@@ -244,6 +248,7 @@ function writeHeader(w: ByteWriter, world: WireWorld, type: number, count: numbe
   w.u32(world.tick);
   w.u8(PHASES.indexOf(world.phase));
   w.u8(OUTCOMES.indexOf(world.outcome));
+  w.u32(world.mapSeed >>> 0); // v5: mapa aleatorio por ronda
   w.u16(count);
 }
 
@@ -312,6 +317,7 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
   const tick = r.u32();
   const phase = PHASES[r.u8()] ?? 'lobby';
   const outcome = OUTCOMES[r.u8()] ?? 'none';
+  const mapSeed = r.u32(); // v5
   const count = r.u16();
   const players: DecodedPlayer[] = [];
   for (let i = 0; i < count; i++) {
@@ -350,6 +356,7 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
     tick,
     phase,
     outcome,
+    mapSeed,
     players,
   };
 }

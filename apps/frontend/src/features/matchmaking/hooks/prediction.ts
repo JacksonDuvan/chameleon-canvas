@@ -16,6 +16,8 @@ import {
   applyMovement,
   canMove,
   clampPose,
+  DEFAULT_MAP,
+  type MapData,
   type PlayerState,
   type SimConfig,
 } from '@mecha/sim';
@@ -42,15 +44,18 @@ export interface AuthoritativeLocal {
   readonly pose: number;
 }
 
-/** Predice un input sobre el jugador local (mismas funciones que el servidor). */
+/** Predice un input sobre el jugador local (mismas funciones que el servidor).
+ *  `map` = mapa de la ronda (aleatorio); la colisión debe usar el MISMO que el servidor
+ *  o la predicción del movimiento junto a props se desincroniza. */
 export function predict(
   local: PlayerState,
   input: PendingInput,
   phase: GamePhase,
   cfg: SimConfig,
+  map: MapData = DEFAULT_MAP,
 ): void {
   applyAim(local, input.cmd);
-  if (canMove(phase, local)) applyMovement(local, input.cmd, cfg, input.dt);
+  if (canMove(phase, local)) applyMovement(local, input.cmd, cfg, input.dt, map);
   // Pose: MISMA regla de validación que el servidor (step.ts) para converger.
   if (local.role === 'hider' && !local.frozen && phase === 'prep') {
     local.pose = clampPose(input.cmd.pose);
@@ -68,6 +73,7 @@ export function reconcile(
   auth: AuthoritativeLocal,
   phase: GamePhase,
   cfg: SimConfig,
+  map: MapData = DEFAULT_MAP,
 ): void {
   // 0) Defensa: si el servidor RETROCEDE lastProcessedInput (rollback/desync/bug),
   // la cola de pendientes ya no es fiable → límpiala y confía solo en el autoritativo
@@ -93,5 +99,5 @@ export function reconcile(
   if (confirmed > 0) pending.splice(0, confirmed);
 
   // 3) Re-aplica los pendientes encima del estado autoritativo (re-predicción).
-  for (let i = 0; i < pending.length; i++) predict(local, pending[i]!, phase, cfg);
+  for (let i = 0; i < pending.length; i++) predict(local, pending[i]!, phase, cfg, map);
 }

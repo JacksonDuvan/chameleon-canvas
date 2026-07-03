@@ -30,8 +30,10 @@ import {
   removePlayer,
   KinematicPhysicsWorld,
   DEFAULT_MAP,
+  generateMap,
   type Rng,
   type IPhysicsWorld,
+  type MapData,
 } from '@mecha/sim';
 import {
   decodeInput,
@@ -72,13 +74,18 @@ export class GameRoomDO extends DurableObject<Env> {
   private ticksSincePersist = 0;
   private ticksSinceReconcile = 0;
   private forceKeyframe = true;
+  // Mapa ALEATORIO por ronda: se regenera cuando cambia `world.mapSeed` (V1: mapa
+  // distinto cada ronda para que el Seeker no se lo aprenda). `generateMap` es puro y
+  // determinista; el cliente genera el mismo con el mapSeed que viaja en el snapshot.
+  private currentMap: MapData = DEFAULT_MAP;
+  private currentMapSeed = 1;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.live = new SingleRoomRepository();
     this.persist = new DoStorageRoomRepository(ctx.storage);
-    // La física conoce los sólidos del mapa (oclusión del rayo de captura, V1-A).
-    // Cuando haya varios mapas, el mapa de la sala vendrá de la config de la sala.
+    // La física conoce los sólidos del mapa (oclusión del rayo de captura, V1-A);
+    // `ensureMap` los reemplaza cuando cambia el mapSeed de la ronda.
     this.physics = new KinematicPhysicsWorld(Number(env.MAX_PLAYERS_PER_ROOM) || 16, DEFAULT_MAP);
     this.rng = makeRng(0);
     const monet = new KvMonetizationAdapter(env.MONET_KV);
@@ -305,6 +312,15 @@ export class GameRoomDO extends DurableObject<Env> {
     this.loop = setInterval(() => this.tick(), TICK_MS);
   }
 
+  /** Regenera el mapa de la ronda y actualiza la física si cambió el `mapSeed`. */
+  private ensureMap(mapSeed: number): void {
+    const seed = (mapSeed >>> 0) || 1;
+    if (seed === this.currentMapSeed) return;
+    this.currentMapSeed = seed;
+    this.currentMap = generateMap(seed);
+    this.physics.setMap(this.currentMap);
+  }
+
   private stopLoopIfEmpty(): void {
     if (this.ctx.getWebSockets().length > 0) return;
     if (this.loop) {
@@ -330,8 +346,11 @@ export class GameRoomDO extends DurableObject<Env> {
     }
 
     // 1) Simulación determinista (sin I/O, sin asignar). RNG enhebrado vía world.rngState.
+    //    Antes: si la ronda cambió de mapa (nuevo mapSeed), regenéralo y actualiza la
+    //    física (oclusión del rayo) — no es camino caliente (una vez por ronda).
+    this.ensureMap(room.world.mapSeed);
     this.rng.setState(room.world.rngState);
-    step(room.world, this.inbox, DT, this.rng, this.physics);
+    step(room.world, this.inbox, DT, this.rng, this.physics, this.currentMap);
     room.world.rngState = this.rng.getState();
     this.inbox.length = 0; // reutiliza el array (sin reasignar)
 

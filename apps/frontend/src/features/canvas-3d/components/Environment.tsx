@@ -13,11 +13,13 @@
  * Skill `r3f-rendering`: geometrías y materiales memoizados/compartidos (una sola vez);
  * estático, sin `useFrame`. La luz direccional prepara el "match de sombras" (P1.2).
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useStore } from 'zustand';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Sky, SoftShadows } from '@react-three/drei';
-import { DEFAULT_MAP, POSE_FLAT, POSE_STAND } from '@mecha/sim';
+import { POSE_FLAT, POSE_STAND } from '@mecha/sim';
+import { worldStore } from '../store/worldStore';
 import { buildPoseGeometries, SPHERE_SEGS_W, SPHERE_SEGS_H } from './avatarGeometry';
 
 /** Roughness de los avatares (`MechaMesh`): los señuelos-muñeco y las bolas lo COMPARTEN
@@ -64,11 +66,14 @@ const HILLS: readonly Hill[] = [
 ];
 
 export function Environment() {
-  const { baseGeo, baseMat, baseRef, built, ground, hillGeo, hillMats } = useMemo(() => {
-    const b = DEFAULT_MAP.bounds;
+  // Mapa ALEATORIO por ronda: se regenera cuando cambia `mapSeed` (selector reactivo;
+  // es estado LENTO, cambia una vez por ronda → re-render puntual permitido, regla 4).
+  const map = useStore(worldStore, (s) => s.map);
+  const memo = useMemo(() => {
+    const b = map.bounds;
     const baseGeo = new THREE.PlaneGeometry(b.maxX - b.minX, b.maxZ - b.minZ);
     const baseMat = new THREE.MeshStandardMaterial({
-      color: toColor(DEFAULT_MAP.floorColor),
+      color: toColor(map.floorColor),
       roughness: 1,
     });
     // Geometrías del avatar COMPARTIDAS con los señuelos del mapa: 'figure' = pose de
@@ -76,7 +81,7 @@ export function Environment() {
     const poseGeos = buildPoseGeometries();
     const figureGeo = poseGeos[POSE_STAND]!;
     const cookieGeo = poseGeos[POSE_FLAT]!;
-    const built: BuiltZone[] = DEFAULT_MAP.zones.map((z) => {
+    const built: BuiltZone[] = map.zones.map((z) => {
       const w = z.maxX - z.minX;
       const d = z.maxZ - z.minZ;
       const cx = (z.minX + z.maxX) / 2;
@@ -131,8 +136,26 @@ export function Environment() {
     const hillMats = HILL_COLORS.map(
       (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }),
     );
-    return { baseGeo, baseMat, baseRef: DEFAULT_MAP.floorColor, built, ground, hillGeo, hillMats };
-  }, []);
+    return { baseGeo, baseMat, baseRef: map.floorColor, built, ground, hillGeo, hillMats };
+  }, [map]);
+  const { baseGeo, baseMat, baseRef, built, ground, hillGeo, hillMats } = memo;
+
+  // Al cambiar de mapa (nueva ronda) se recomputa `memo`: libera los recursos GPU del
+  // mapa anterior para no acumular geometrías/materiales (skill r3f-rendering, regla 7).
+  useEffect(() => {
+    return () => {
+      baseGeo.dispose();
+      baseMat.dispose();
+      ground.geometry.dispose();
+      ground.material.dispose();
+      hillGeo.dispose();
+      for (const m of hillMats) m.dispose();
+      for (const z of built) {
+        z.geometry.dispose();
+        (z.material as THREE.Material).dispose();
+      }
+    };
+  }, [memo, baseGeo, baseMat, ground, hillGeo, hillMats, built]);
 
   return (
     <>

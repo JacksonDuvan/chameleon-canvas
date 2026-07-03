@@ -43,6 +43,10 @@ export function startGame(world: WorldState, rng: Rng): void {
     ids[j] = tmp;
   }
 
+  // Mapa aleatorio de la ronda: nueva semilla del RNG (determinista, misma en ambos
+  // lados vía el wire) → el escenario cambia cada ronda y el Seeker no se lo aprende.
+  world.mapSeed = (rng.nextInt(0x7fffffff) ^ (world.tick + 1)) >>> 0 || 1;
+
   const seekerCount = Math.max(1, Math.floor(ids.length / 4));
   for (let i = 0; i < ids.length; i++) {
     const p = world.players.get(ids[i]!);

@@ -16,6 +16,10 @@ export class WorldState {
   outcome: GameOutcome;
   seed: number; // semilla original inmutable
   rngState: number; // estado evolutivo del RNG; lo enhebra ProcessTick entre ticks
+  /** Semilla del MAPA de la ronda (`generateMap`). Cambia en cada `startGame` para que
+   *  el escenario sea distinto cada ronda (el Seeker no se lo aprende). Viaja en el
+   *  wire → cliente y servidor generan el MISMO mapa. */
+  mapSeed: number;
   readonly players: Map<string, PlayerState>;
   readonly config: SimConfig;
 
@@ -26,6 +30,7 @@ export class WorldState {
     this.outcome = 'none';
     this.seed = seed >>> 0;
     this.rngState = this.seed;
+    this.mapSeed = this.seed || 1; // mapa de lobby por defecto; startGame lo re-rollea
     this.players = new Map();
     this.config = config;
   }

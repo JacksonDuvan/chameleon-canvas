@@ -35,6 +35,7 @@ function mkWorld(players: WirePlayer[], over: Partial<WireWorld> = {}): WireWorl
     tick: 7,
     phase: 'prep',
     outcome: 'none',
+    mapSeed: 0xabcdef01,
     players: new Map(players.map((p) => [p.id, p])),
     ...over,
   };
@@ -81,6 +82,7 @@ describe('wire · KEYFRAME', () => {
     expect(snap.type).toBe('keyframe');
     expect(snap.tick).toBe(7);
     expect(snap.phase).toBe('prep');
+    expect(snap.mapSeed).toBe(0xabcdef01); // v5: semilla del mapa de la ronda
     expect(snap.players).toHaveLength(2);
 
     const s1 = snap.players.find((p) => p.id === 's1')!;

@@ -28,14 +28,14 @@ export class KinematicPhysicsWorld implements IPhysicsWorld {
   private readonly cz: Float64Array;
   private readonly cr: Float64Array;
   private count: number;
-  // Obstáculos sólidos del mapa (AABBs), extraídos una vez (mapa estático).
-  private readonly obMinX: Float64Array;
-  private readonly obMinY: Float64Array;
-  private readonly obMinZ: Float64Array;
-  private readonly obMaxX: Float64Array;
-  private readonly obMaxY: Float64Array;
-  private readonly obMaxZ: Float64Array;
-  private readonly obCount: number;
+  // Obstáculos sólidos del mapa (AABBs). Reasignados por `setMap` (mapa por ronda).
+  private obMinX: Float64Array;
+  private obMinY: Float64Array;
+  private obMinZ: Float64Array;
+  private obMaxX: Float64Array;
+  private obMaxY: Float64Array;
+  private obMaxZ: Float64Array;
+  private obCount: number;
 
   constructor(capacity = 16, map?: MapData) {
     this.ids = new Array<string>(capacity).fill('');
@@ -44,8 +44,19 @@ export class KinematicPhysicsWorld implements IPhysicsWorld {
     this.cz = new Float64Array(capacity);
     this.cr = new Float64Array(capacity);
     this.count = 0;
+    this.obCount = 0;
+    this.obMinX = new Float64Array(0);
+    this.obMinY = new Float64Array(0);
+    this.obMinZ = new Float64Array(0);
+    this.obMaxX = new Float64Array(0);
+    this.obMaxY = new Float64Array(0);
+    this.obMaxZ = new Float64Array(0);
+    if (map) this.setMap(map);
+  }
 
-    const solids = map ? map.zones.filter(isSolidZone) : [];
+  /** Reemplaza los obstáculos por los del mapa (mapa aleatorio por ronda). */
+  setMap(map: MapData): void {
+    const solids = map.zones.filter(isSolidZone);
     this.obCount = solids.length;
     this.obMinX = new Float64Array(this.obCount);
     this.obMinY = new Float64Array(this.obCount);

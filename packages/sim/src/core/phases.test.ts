@@ -34,6 +34,22 @@ describe('startGame', () => {
     expect(w.phaseEndsAtTick).toBe(w.tick + w.config.prepDurationTicks);
   });
 
+  it('re-rollea el mapSeed al arrancar (mapa aleatorio por ronda)', () => {
+    const w = worldWith(4);
+    const before = w.mapSeed;
+    startGame(w, makeRng(w.seed));
+    expect(w.mapSeed).not.toBe(before);
+    expect(w.mapSeed >>> 0).toBe(w.mapSeed); // u32 válido
+  });
+
+  it('el mapSeed es determinista con la misma semilla de RNG', () => {
+    const a = worldWith(4);
+    const b = worldWith(4);
+    startGame(a, makeRng(99));
+    startGame(b, makeRng(99));
+    expect(a.mapSeed).toBe(b.mapSeed);
+  });
+
   it('asigna ~1 Seeker por cada 4 jugadores (mínimo 1)', () => {
     const w = worldWith(8);
     startGame(w, makeRng(w.seed));

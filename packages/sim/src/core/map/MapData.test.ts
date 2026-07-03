@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_MAP, isSolidZone, referenceColorAt, type MapData } from './MapData';
+import { DEFAULT_MAP, generateMap, isSolidZone, referenceColorAt, type MapData } from './MapData';
 import { ColorRGBA } from '../value-objects/ColorRGBA';
 import { DEFAULT_SIM_CONFIG } from '../config';
 import { initialWorld } from '../entities/WorldState';
@@ -100,63 +100,90 @@ describe('DEFAULT_MAP', () => {
   });
 });
 
-describe('DEFAULT_MAP v2 — pueblo (feedback del playtest: mapa grande + mimetismo)', () => {
-  it('los límites del mapa y los de SimConfig son EL MISMO volumen (una sola verdad)', () => {
-    // `movement.applyMovement` clampa con cfg.bounds pero colisiona con map.zones:
-    // si divergen, hay franjas donde una autoridad existe y la otra no.
-    expect(DEFAULT_MAP.bounds).toEqual(DEFAULT_SIM_CONFIG.bounds);
+describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () => {
+  // Muestreo de semillas variadas para los tests de invariantes.
+  const SEEDS = [1, 2, 3, 7, 42, 100, 999, 123456, 0xdeadbeef, 0];
+
+  it('DETERMINISTA: el mismo seed produce un mapa IDÉNTICO (byte a byte)', () => {
+    // El requisito clave del netcode: cliente y servidor generan el mismo mapa desde
+    // el mapSeed del wire. Comparación estructural profunda (JSON estable).
+    for (const s of SEEDS) {
+      expect(JSON.stringify(generateMap(s))).toEqual(JSON.stringify(generateMap(s)));
+    }
   });
 
-  it('es un mapa grande (≥ 44 m de lado): pueblo, no habitación', () => {
-    const b = DEFAULT_MAP.bounds;
-    expect(b.maxX - b.minX).toBeGreaterThanOrEqual(44);
-    expect(b.maxZ - b.minZ).toBeGreaterThanOrEqual(44);
-  });
-
-  it('TODA la rejilla de spawn queda libre de sólidos (nadie nace dentro de una casa)', () => {
-    const world = initialWorld();
-    const r = DEFAULT_SIM_CONFIG.playerRadius;
-    for (let i = 0; i < 25; i++) {
-      const p = spawnPlayer(world, `p${i}`);
-      for (const z of DEFAULT_MAP.zones) {
-        if (!isSolidZone(z)) continue;
-        const inside =
-          p.pos.x > z.minX - r &&
-          p.pos.x < z.maxX + r &&
-          p.pos.z > z.minZ - r &&
-          p.pos.z < z.maxZ + r;
-        expect(inside, `spawn ${i} (${p.pos.x},${p.pos.z}) pisa ${z.id}`).toBe(false);
+  it('coordenadas cuantizadas a 0.1 m (sin deriva de coma flotante entre isolates)', () => {
+    for (const z of generateMap(42).zones) {
+      for (const v of [z.minX, z.maxX, z.minZ, z.maxZ]) {
+        expect(Math.abs(Math.round(v * 10) - v * 10)).toBeLessThan(1e-6);
       }
     }
   });
 
-  it('tiene señuelos con forma de muñeco: ≥6 "figure" de pie y ≥4 "figureWall" en muros', () => {
-    // El pilar del mimetismo del original (cactus con brazos, galletas en las paredes):
-    // un Hider pintado y posado JUNTO a un señuelo debe ser indistinguible.
-    const figures = DEFAULT_MAP.zones.filter((z) => z.shape === 'figure');
-    const wallFigures = DEFAULT_MAP.zones.filter((z) => z.shape === 'figureWall');
-    expect(figures.length).toBeGreaterThanOrEqual(6);
-    expect(wallFigures.length).toBeGreaterThanOrEqual(4);
-    // Los señuelos son sólidos: ocluyen el rayo (dispararle a una estatua = fallo).
-    for (const z of [...figures, ...wallFigures]) expect(isSolidZone(z)).toBe(true);
+  it('semillas distintas producen mapas distintos (de verdad cambia por ronda)', () => {
+    const a = JSON.stringify(generateMap(1));
+    const distintos = SEEDS.slice(1).filter((s) => JSON.stringify(generateMap(s)) !== a);
+    expect(distintos.length).toBeGreaterThanOrEqual(SEEDS.length - 2);
   });
 
-  it('es una MINICIUDAD: suficientes muros para formar varias casas (≥16 tramos)', () => {
-    // 4 perimetrales + ≥12 tramos de casas/cobertizos (feedback del playtest:
-    // "quisiera que hubiera casas, una especie de miniciudad").
-    const walls = DEFAULT_MAP.zones.filter((z) => z.kind === 'wall');
-    expect(walls.length).toBeGreaterThanOrEqual(16);
+  it('DEFAULT_MAP === generateMap(1) (mismo mapa de lobby/fallback)', () => {
+    expect(JSON.stringify(DEFAULT_MAP)).toEqual(JSON.stringify(generateMap(1)));
   });
 
-  it('ofrece variedad real de superficies: ≥8 colores distintos', () => {
-    const colors = new Set<number>([DEFAULT_MAP.floorColor]);
-    for (const z of DEFAULT_MAP.zones) colors.add(z.color);
-    expect(colors.size).toBeGreaterThanOrEqual(8);
-  });
+  // ── Invariantes que DEBEN cumplirse para CUALQUIER semilla ──
+  for (const seed of SEEDS) {
+    describe(`invariantes @ seed=${seed}`, () => {
+      const map = generateMap(seed);
 
-  it('también hay formas que emparejan con las otras poses: bolas y cilindros', () => {
-    const shapes = new Set(DEFAULT_MAP.zones.map((z) => z.shape ?? 'box'));
-    expect(shapes.has('sphere')).toBe(true);
-    expect(shapes.has('cylinder')).toBe(true);
-  });
+      it('bounds = SimConfig y recinto grande (≥44 m)', () => {
+        expect(map.bounds).toEqual(DEFAULT_SIM_CONFIG.bounds);
+        expect(map.bounds.maxX - map.bounds.minX).toBeGreaterThanOrEqual(44);
+      });
+
+      it('toda zona cabe dentro de los límites', () => {
+        for (const z of map.zones) {
+          expect(z.minX).toBeGreaterThanOrEqual(map.bounds.minX);
+          expect(z.maxX).toBeLessThanOrEqual(map.bounds.maxX);
+          expect(z.minZ).toBeGreaterThanOrEqual(map.bounds.minZ);
+          expect(z.maxZ).toBeLessThanOrEqual(map.bounds.maxZ);
+        }
+      });
+
+      it('la rejilla de spawn queda LIBRE de sólidos (nadie nace en una casa)', () => {
+        const world = initialWorld(seed);
+        const r = DEFAULT_SIM_CONFIG.playerRadius;
+        for (let i = 0; i < 25; i++) {
+          const p = spawnPlayer(world, `p${i}`);
+          for (const z of map.zones) {
+            if (!isSolidZone(z)) continue;
+            const inside =
+              p.pos.x > z.minX - r && p.pos.x < z.maxX + r &&
+              p.pos.z > z.minZ - r && p.pos.z < z.maxZ + r;
+            expect(inside, `spawn ${i} pisa ${z.id}`).toBe(false);
+          }
+        }
+      });
+
+      it('miniciudad + mimetismo: ≥16 muros, ≥6 figure, ≥4 figureWall, esfera+cilindro', () => {
+        expect(map.zones.filter((z) => z.kind === 'wall').length).toBeGreaterThanOrEqual(16);
+        expect(map.zones.filter((z) => z.shape === 'figure').length).toBeGreaterThanOrEqual(6);
+        expect(map.zones.filter((z) => z.shape === 'figureWall').length).toBeGreaterThanOrEqual(4);
+        const shapes = new Set(map.zones.map((z) => z.shape ?? 'box'));
+        expect(shapes.has('sphere')).toBe(true);
+        expect(shapes.has('cylinder')).toBe(true);
+      });
+
+      it('≥8 colores distintos y color de referencia definido en todo el mapa', () => {
+        const colors = new Set<number>([map.floorColor]);
+        for (const z of map.zones) colors.add(z.color);
+        expect(colors.size).toBeGreaterThanOrEqual(8);
+        const out = new ColorRGBA();
+        for (let x = map.bounds.minX; x <= map.bounds.maxX; x += 5) {
+          for (let z = map.bounds.minZ; z <= map.bounds.maxZ; z += 5) {
+            expect(referenceColorAt(map, x, z, out).a).toBe(255);
+          }
+        }
+      });
+    });
+  }
 });

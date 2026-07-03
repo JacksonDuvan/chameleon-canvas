@@ -14,6 +14,7 @@
  */
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { WorldState } from '../core/entities/WorldState';
+import type { MapData } from '../core/map/MapData';
 import type { IPhysicsWorld, RaycastHit } from './IPhysicsWorld';
 
 export class RapierPhysicsWorld implements IPhysicsWorld {
@@ -33,6 +34,10 @@ export class RapierPhysicsWorld implements IPhysicsWorld {
   syncBodies(_world: WorldState): void {
     // TODO: crear/actualizar rigid bodies + colliders desde world.players,
     // reutilizando handles (sin recrear por tick); this.world.step() si se integran físicas.
+  }
+
+  setMap(_map: MapData): void {
+    // TODO: reconstruir los colliders estáticos del mapa (mapa aleatorio por ronda).
   }
 
   raycastClosest(

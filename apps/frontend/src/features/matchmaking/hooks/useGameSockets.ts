@@ -21,7 +21,7 @@ import {
   type DecodedSnapshot,
   type UserCommand,
 } from '@mecha/shared';
-import { DEFAULT_SIM_CONFIG, Vec3 } from '@mecha/sim';
+import { DEFAULT_SIM_CONFIG, Vec3, generateMap } from '@mecha/sim';
 import { buildRevealList, type RevealSubject } from '@/features/canvas-3d/hooks/reveal';
 
 const DT = 1 / DEFAULT_SIM_CONFIG.tickHz;
@@ -93,11 +93,19 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   const seen = new Set<string>();
   let confirmedHits = 0; // capturas confirmadas por el servidor en este snapshot
 
+  // Mapa ALEATORIO por ronda: si el mapSeed del snapshot cambió, regenera el mapa
+  // (mismo `generateMap` determinista que el servidor). El render y la predicción lo
+  // leen del store, así la colisión del cliente coincide con la autoritativa.
+  if (snap.mapSeed !== st.mapSeed) {
+    worldStore.setState({ mapSeed: snap.mapSeed, map: generateMap(snap.mapSeed) });
+  }
+  const roundMap = worldStore.getState().map;
+
   for (const p of snap.players) {
     if (p.id === st.localPlayerId) {
       // Jugador local: reconciliar (re-aplica los inputs no confirmados; sin snap).
       const wasCaught = st.local.caught;
-      reconcile(st.local, pending, p, snap.phase, DEFAULT_SIM_CONFIG);
+      reconcile(st.local, pending, p, snap.phase, DEFAULT_SIM_CONFIG, roundMap);
       // Camuflaje y munición son autoritativos del servidor (no se predicen): cópialos.
       st.local.camoScore = p.camoScore;
       st.local.ammo = p.ammo;
@@ -278,7 +286,8 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
     st.localPrevPos.setMut(st.local.pos.x, st.local.pos.y, st.local.pos.z);
     st.localPredAt = performance.now();
     // Predicción local inmediata + buffer de inputs pendientes (para reconciliar).
-    predict(st.local, input, st.phase, DEFAULT_SIM_CONFIG);
+    // Usa el mapa de la ronda (colisión idéntica al servidor).
+    predict(st.local, input, st.phase, DEFAULT_SIM_CONFIG, st.map);
     if (pendingRef.current.length >= MAX_PENDING_INPUTS) pendingRef.current.shift(); // cota
     pendingRef.current.push(input);
     ws.send(encodeInput({ seq, ...intent }));

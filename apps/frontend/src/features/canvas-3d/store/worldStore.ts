@@ -12,7 +12,7 @@
  * (refleja la separación de `hexagonal-vertical-slicing`).
  */
 import { createStore } from 'zustand/vanilla';
-import { Vec3, PlayerState, type GameOutcome } from '@mecha/sim';
+import { Vec3, PlayerState, DEFAULT_MAP, type GameOutcome, type MapData } from '@mecha/sim';
 import type { GamePhase, PlayerRole } from '@mecha/shared';
 import type { RevealEntry } from '../hooks/reveal';
 
@@ -57,6 +57,11 @@ export interface WorldStoreState {
 
   // ── LENTO (presentación; seguro con selector reactivo) ──
   phase: GamePhase;
+  /** Semilla del mapa de la ronda (mapa ALEATORIO). Cambia una vez por ronda. */
+  mapSeed: number;
+  /** Mapa generado de la ronda (= generateMap(mapSeed)). Lo LEE el render (Environment)
+   *  y la predicción del cliente (colisión idéntica al servidor). Cambia con mapSeed. */
+  map: MapData;
   outcome: GameOutcome;
   connected: boolean;
   isHost: boolean; // solo el host puede iniciar la ronda
@@ -80,6 +85,8 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   localPlayerId: null,
   serverTick: 0,
   phase: 'lobby',
+  mapSeed: 1,
+  map: DEFAULT_MAP,
   outcome: 'none',
   connected: false,
   isHost: false,
