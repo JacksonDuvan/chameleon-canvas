@@ -27,6 +27,7 @@ import {
 } from '@/features/matchmaking/hooks/session';
 import { RoomForm } from '@/features/matchmaking/components/RoomForm';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
+import { useAudio } from '@/features/canvas-3d/audio/useAudio';
 import { Hud } from '@/shared/components/Hud';
 
 export const Route = createFileRoute('/')({ component: Home });
@@ -72,8 +73,9 @@ function LobbyFlow() {
 }
 
 function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
-  const sockets = useGameSockets(session.roomId, session.name);
+  const sockets = useGameSockets(session);
   useLocalInput(sockets);
+  useAudio(); // V1-H: SFX + ambiente + silbidos (presentación pura)
 
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>

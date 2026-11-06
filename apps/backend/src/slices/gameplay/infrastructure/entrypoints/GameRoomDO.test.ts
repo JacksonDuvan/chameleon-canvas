@@ -64,6 +64,13 @@ class JsonCollector {
       this.waiters.push(poll);
     });
   }
+
+  /** ¿Cuántos mensajes vistos cumplen `pred`? (para asserts de "no llegó ninguno"). */
+  seenCount(pred: (m: unknown) => boolean): number {
+    let n = 0;
+    for (const m of this.seen) if (pred(m)) n++;
+    return n;
+  }
 }
 
 function stubFor(name: string) {
@@ -307,8 +314,7 @@ describe('GameRoomDO (integración, workerd)', () => {
     }
   });
 
-  it('ESTRÉS: flood de 300 inputs binarios en ráfaga no mata el bucle (siguen llegando snapshots)', async () => {
-    const stub = stubFor('r-stress-flood');
+  it('ESTRÉS: flood de 300 inputs binarios en ráfaga no mata el bucle (siguen llegando snapshots)', async () => {    const stub = stubFor('r-stress-flood');
     const res = await connect(stub, 'r-stress-flood', 'Flooder');
     const ws = res.webSocket!;
     ws.binaryType = 'arraybuffer';
@@ -343,6 +349,65 @@ describe('GameRoomDO (integración, workerd)', () => {
     const snap = decodeSnapshot(snapBuf);
     expect(snap.tick).toBeGreaterThan(0);
     expect(snap.players.length).toBe(1);
+    ws.close();
+  });
+
+  // ── V1-H: silbidos (regla opcional del host; pista sonora en HUNT) ──
+
+  it('con la regla ACTIVA, un Hider vivo silba en HUNT (posición incluida)', async () => {
+    // El host crea la sala con ?whistling=1&whistleEverySec=1 (cadencia corta para
+    // el test); luego envenenamos la fase a hunt como si la ronda hubiera arrancado.
+    const stub = stubFor('r-whistle-on');
+    const res = await stub.fetch(
+      'https://do/api/rooms/r-whistle-on/ws?name=Ana&whistling=1&whistleEverySec=1',
+      { headers: { Upgrade: 'websocket' } },
+    );
+    expect(res.status).toBe(101);
+    const ws = res.webSocket!;
+    const col = new JsonCollector(ws);
+    ws.accept();
+    await col.until((m) => (m as { type?: string }).type === 'welcome');
+
+    await runInDurableObject(stub, async (instance) => {
+      const room = (
+        instance as unknown as { live: { current(): { config: { whistling: boolean; whistleEverySec: number }; world: { phase: string } } | null } }
+      ).live.current();
+      expect(room).not.toBeNull();
+      expect(room!.config.whistling).toBe(true); // la regla del host quedó en la config
+      expect(room!.config.whistleEverySec).toBe(1);
+      room!.world.phase = 'hunt';
+    });
+
+    const whistle = (await col.until((m) => (m as { type?: string }).type === 'whistle', 6000)) as {
+      playerId: string;
+      x: number;
+      y: number;
+      z: number;
+    };
+    expect(typeof whistle.playerId).toBe('string');
+    expect(Number.isFinite(whistle.x)).toBe(true);
+    expect(Number.isFinite(whistle.z)).toBe(true);
+    ws.close();
+  });
+
+  it('sin la regla (default) NADIE silba', async () => {
+    const stub = stubFor('r-whistle-off');
+    const res = await connect(stub, 'r-whistle-off', 'Ana'); // sin query params ⇒ default off
+    const ws = res.webSocket!;
+    const col = new JsonCollector(ws);
+    ws.accept();
+    await runInDurableObject(stub, async (instance) => {
+      const room = (
+        instance as unknown as { live: { current(): { config: { whistling: boolean }; world: { phase: string } } | null } }
+      ).live.current();
+      expect(room!.config.whistling).toBe(false);
+      room!.world.phase = 'hunt';
+    });
+    // 2.5 s de gracia: no debe llegar NI UN silbido (cadencia del default = 14 s,
+    // pero el scheduler con regla off ni siquiera programa).
+    await new Promise((r) => setTimeout(r, 2500));
+    const whistles = col.seenCount((m) => (m as { type?: string }).type === 'whistle');
+    expect(whistles).toBe(0);
     ws.close();
   });
 });

@@ -723,3 +723,32 @@ body,
   color: #241a00;
   border-color: rgba(185, 143, 0, 0.5);
 }
+
+/* V1-H · Audio — regla del host (RoomForm) + toggle de mute (HUD) */
+.lobby-rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  opacity: 0.8;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.lobby-rule input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--sun-deep);
+  cursor: pointer;
+}
+.hud-chip--audio {
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 15px;
+  user-select: none;
+}
+.hud-chip--audio:hover {
+  filter: brightness(1.15);
+}

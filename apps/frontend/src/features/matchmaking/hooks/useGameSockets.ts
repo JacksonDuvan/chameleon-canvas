@@ -25,6 +25,10 @@ import { DEFAULT_SIM_CONFIG, Vec3, generateMap } from '@mecha/sim';
 import { buildRevealList, type RevealSubject } from '@/features/canvas-3d/hooks/reveal';
 import { parseRoster } from './roster';
 import { resetForNewRoom } from '@/features/canvas-3d/store/worldStore';
+import { audio } from '@/features/canvas-3d/audio/engine';
+import { computeSpatial } from '@/features/canvas-3d/audio/spatial';
+import { parseWhistle } from '@/features/canvas-3d/audio/whistleEvent';
+import type { Session } from './session';
 
 const DT = 1 / DEFAULT_SIM_CONFIG.tickHz;
 const MAX_PENDING_INPUTS = 120; // ~4 s a 30 Hz: cota ante pérdida de snapshots
@@ -71,10 +75,26 @@ function handleControlMessage(raw: string): void {
       // Por si un snapshot creó al local como remoto antes del welcome (race): bórralo.
       worldStore.getState().remotes.delete(msg.playerId);
       worldStore.setState({ localPlayerId: msg.playerId, isHost: msg.isHost === true });
+      audio.playJoin(); // V1-H: entraste
     } else if (msg.type === 'roster') {
       // V1-E: lista de jugadores del lobby (nombres server-only; no van en el wire).
       const roster = parseRoster(msg);
       if (roster) worldStore.setState({ lobbyRoster: roster.players });
+    } else if (msg.type === 'whistle') {
+      // V1-H: silbido de un Hider (regla del host). El LOCAL no suena (oírse a
+      // uno mismo posicionado es raro); los remotos suenan en 3D.
+      const whistle = parseWhistle(msg);
+      if (whistle) {
+        const st = worldStore.getState();
+        if (whistle.playerId !== st.localPlayerId) {
+          audio.playWhistle(
+            computeSpatial(
+              { x: st.local.pos.x, z: st.local.pos.z, aimX: st.local.aimX, aimZ: st.local.aimZ },
+              { x: whistle.x, z: whistle.z },
+            ),
+          );
+        }
+      }
     } else if (msg.type === 'host') {
       // El servidor reasignó el host (el host anterior se desconectó).
       worldStore.setState({ isHost: msg.isHost === true });
@@ -218,7 +238,8 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
   worldStore.setState({ phase: snap.phase, outcome: snap.outcome, localRole: st.local.role });
 }
 
-export function useGameSockets(roomId: string, name: string): GameSockets {
+export function useGameSockets(session: Session): GameSockets {
+  const { roomId, name } = session;
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<PendingInput[]>([]);
   const seqRef = useRef(0);
@@ -232,7 +253,11 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
 
     const connect = (): void => {
       if (disposed) return;
-      const ws = new WebSocket(`${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}`);
+      // V1-H: la regla de silbidos la fija el HOST (solo crea config en sala FRESH).
+      const whistleParam = session.whistling ? '&whistling=1' : '';
+      const ws = new WebSocket(
+        `${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}${whistleParam}`,
+      );
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
       pendingRef.current.length = 0;
@@ -281,7 +306,7 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
       // V1-E: al salir de la sala, el estado de la sala no se filtra a la siguiente.
       resetForNewRoom();
     };
-  }, [roomId, name]);
+  }, [roomId, name, session.whistling]);
 
   const sendInput = useCallback((intent: InputIntent) => {
     const ws = wsRef.current;

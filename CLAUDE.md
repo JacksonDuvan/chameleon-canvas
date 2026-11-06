@@ -165,6 +165,7 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/15-step-12-random-map.md`](docs/15-step-12-random-map.md) — **mapa ALEATORIO por ronda** (feedback: que el Seeker no se aprenda el mapa): `generateMap(seed)` puro/determinista (cuantizado a 0.1 m), `WorldState.mapSeed` re-rolleado en `startGame`, **wire v5** (mapSeed u32 en el header), `IPhysicsWorld.setMap`, cliente regenera + hila el mapa por predicción/render. Determinismo verificado E2E (2 clientes = mismo mapa; cambia por ronda). Lección E2E: Chrome headless huérfanos → siempre `try/finally`.
 - [`docs/16-step-13-mimic-poses.md`](docs/16-step-13-mimic-poses.md) — **convertirse en figuras del escenario** (feedback): 2 poses nuevas `POSE_BOX`/`POSE_CYLINDER` (6 en total; bola y estatua ya existían), geometría caja/barril + hitbox, **wire v6** (pose en 3 bits, bits 3-5 de roleFlags), `clampPose` robusto, ciclo de R por las 6, HUD/render actualizados. Verificado E2E.
 - [`docs/17-step-14-matchmaking.md`](docs/17-step-14-matchmaking.md) — **V1-E matchmaking por código**: slice `matchmaking` (hexagonal completo: código Crockford base32 en `@shared`, `CreateRoom`/`ListRooms` + `KvRoomRegistry` con TTL, rutas Hono RPC), roster en vivo (`{type:'roster'}` en cambios de roster, camino frío), **pre-flight** `GET /api/rooms/:roomId/status` (read-only; evita reintento infinito al unirse a ronda en curso), RoomForm/PlayerList reales, sesión en sessionStorage. Verificado E2E 2 navegadores.
+- [`docs/18-step-15-audio.md`](docs/18-step-15-audio.md) — **V1-H audio mínimo**: motor WebAudio PROCEDURAL (cero assets: silbido seno+vibrato, hit chime, "womp" al ser atrapado, disparo, ambiente viento+pajaritos, fanfarria/derrota), silbidos server-authoritative (`domain/whistle.ts` cadencia ±25%, scheduler en el DO en HUNT, `{type:'whistle'}` con posición), regla del host (checkbox RoomForm → `?whistling=1`), posicionamiento estéreo puro (`computeSpatial`), toggle 🔊/🔇 en HUD.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
@@ -176,13 +177,13 @@ fix temblor + caminata + miniciudad (`docs/13`) · Paso 11 ✅ V1-F results/reve
 fix del SimConfig persistido (`docs/14`) · Paso 12 ✅ mapa ALEATORIO por ronda
 (wire v5, `docs/15`) · **Paso 13 ✅ poses de mimetismo caja/barril (wire v6) — ver
 `docs/16`** · **Paso 14 ✅ V1-E matchmaking por código + roster + pre-flight
-(`docs/17`)**.
+(`docs/17`)** · **Paso 15 ✅ V1-H audio mínimo + silbidos del host (`docs/18`)**.
 **Ya se puede jugar por código con amigos** (crear/unirse, nombres, lobby compartido).
 **El objetivo es lanzar una V1**:
 clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**.
 El corte y la "definición de done" de V1 están en
 **[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (backlog completo en [`docs/06`](docs/06-roadmap.md)).
-**Siguiente:** playtest (usuario) · audio (V1-H) · deploy (V1-I). Al continuar
+**Siguiente:** playtest (usuario) · deploy (V1-I). Al continuar
 en otra sesión: lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la
 skill relevante.
 

@@ -12,6 +12,11 @@
 export interface Session {
   readonly roomId: string;
   readonly name: string;
+  /**
+   * V1-H: regla de silbidos que fija el HOST al crear la sala (viaja como query
+   * param al conectar; solo aplica a la creación FRESH de la sala).
+   */
+  readonly whistling?: boolean;
 }
 
 const SESSION_KEY = 'mecha.session';
@@ -21,9 +26,14 @@ export function readSession(storage: Storage): Session | null {
   try {
     const raw = storage.getItem(SESSION_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { roomId?: unknown; name?: unknown };
+    const parsed = JSON.parse(raw) as { roomId?: unknown; name?: unknown; whistling?: unknown };
     if (typeof parsed.roomId === 'string' && typeof parsed.name === 'string' && parsed.roomId && parsed.name) {
-      return { roomId: parsed.roomId, name: parsed.name };
+      return {
+        roomId: parsed.roomId,
+        name: parsed.name,
+        // Solo transporta el flag cuando está ACTIVO (sessions mínimas por defecto).
+        ...(parsed.whistling === true ? { whistling: true } : {}),
+      };
     }
     return null;
   } catch {

@@ -19,6 +19,7 @@ import { POSE_COUNT } from '@mecha/sim';
 import { lookState, consumePendingShot } from '@/features/canvas-3d/hooks/useMouseLook';
 import { signalLocalShot } from '@/features/canvas-3d/components/ShotTracers';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
+import { audio } from '@/features/canvas-3d/audio/engine';
 import type { GameSockets } from './useGameSockets';
 
 const TICK_MS = 1000 / 30;
@@ -68,11 +69,14 @@ export function useLocalInput(sockets: GameSockets): void {
         action = ActionKind.CATCH;
       }
 
-      // Feedback inmediato del disparo (trazador visual): solo si de verdad puede
-      // disparar (Seeker en Hunt) — el impacto real lo decide el servidor.
+      // Feedback inmediato del disparo (trazador visual + SFX): solo si de verdad
+      // puede disparar (Seeker en Hunt) — el impacto real lo decide el servidor.
       if (action === ActionKind.CATCH) {
         const st = worldStore.getState();
-        if (st.local.role === 'seeker' && st.phase === 'hunt') signalLocalShot();
+        if (st.local.role === 'seeker' && st.phase === 'hunt') {
+          signalLocalShot();
+          audio.playShot(); // V1-H
+        }
       }
 
       sockets.sendInput({ moveX, moveZ, aimX, aimY, aimZ, pose, action });

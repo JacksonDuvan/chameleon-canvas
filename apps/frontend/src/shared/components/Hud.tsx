@@ -12,6 +12,7 @@ import { useStore } from 'zustand';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { revealIndexAt } from '@/features/canvas-3d/hooks/reveal';
 import { PlayerList } from '@/features/matchmaking/components/PlayerList';
+import { audio } from '@/features/canvas-3d/audio/engine';
 import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 
 const PHASE_LABEL: Record<string, string> = {
@@ -187,6 +188,21 @@ function useHitMarker(): boolean {
   return show;
 }
 
+/** V1-H — toggle de mute del motor de audio (pref recordada en localStorage). */
+function AudioToggle() {
+  const [muted, setMuted] = useState(() => audio.isMuted());
+  const toggle = (): void => {
+    const next = !muted;
+    audio.setMuted(next);
+    setMuted(next);
+  };
+  return (
+    <button type="button" className="hud-chip hud-chip--audio" onClick={toggle} aria-pressed={muted}>
+      {muted ? '🔇' : '🔊'}
+    </button>
+  );
+}
+
 export function Hud({
   onStart,
   onRestart,
@@ -258,6 +274,7 @@ export function Hud({
               ? 'WASD mover · ratón mirar · click disparar'
               : 'WASD mover · ratón mirar · E absorber · R pose'}
           </span>
+          <AudioToggle />
           <span className="hud-chip hud-chip--muted">{connected ? '● conectado' : '○ desconectado'}</span>
         </div>
       </div>

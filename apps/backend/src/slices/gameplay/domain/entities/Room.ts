@@ -14,9 +14,15 @@ import { Player } from './Player';
 export interface RoomConfig {
   readonly maxPlayers: number;
   readonly whistling: boolean; // regla opcional de silbidos (pista sonora)
+  /** Cadencia base (s) entre silbidos de cada Hider (V1-H; solo si `whistling`). */
+  readonly whistleEverySec: number;
 }
 
-export const DEFAULT_ROOM_CONFIG: RoomConfig = { maxPlayers: 12, whistling: false };
+export const DEFAULT_ROOM_CONFIG: RoomConfig = {
+  maxPlayers: 12,
+  whistling: false,
+  whistleEverySec: 14,
+};
 
 export class Room {
   readonly id: string;
