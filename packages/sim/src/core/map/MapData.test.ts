@@ -7,8 +7,11 @@ import {
   isEdgeOpen,
   isSolidZone,
   referenceColorAt,
+  zoneYMin,
+  zoneYMax,
   CELL_OUT,
   CELL_ROOM,
+  HOUSE_CELL,
   HOUSE_COLS,
   HOUSE_ROWS,
   type MapData,
@@ -205,6 +208,18 @@ describe('generateMap — CASA procedural: pasillos + cuartos, grande e irregula
         }
       });
 
+      it('OFICINA low-poly: ≥30 muebles (archivadores/mesas/terminales/taburetes)', () => {
+        // Spec r4: la casa deja de ser un laberinto plano — cada cuarto recibe
+        // mobiliario SÓLIDO (el servidor lo conoce: ocluye disparos y da color
+        // de camuflaje al abrazarlo). Celdas libres, nunca en el spawn.
+        const office = map.zones.filter((z) => /-(cabinet|desk|terminal|stool)-/.test(z.id));
+        expect(office.length).toBeGreaterThanOrEqual(30);
+        // Los muebles no pisan el spawn (hall central ±3.5).
+        for (const z of office) {
+          expect(z.maxX < -3.5 || z.minX > 3.5 || z.maxZ < -3.5 || z.minZ > 3.5).toBe(true);
+        }
+      });
+
       it('mimetismo por cuarto: ≥10 figure, ≥6 figureWall, esfera+cilindro, ≥24 muros', () => {
         expect(map.zones.filter((z) => z.kind === 'wall').length).toBeGreaterThanOrEqual(24);
         expect(map.zones.filter((z) => z.shape === 'figure').length).toBeGreaterThanOrEqual(10);
@@ -212,6 +227,100 @@ describe('generateMap — CASA procedural: pasillos + cuartos, grande e irregula
         const shapes = new Set(map.zones.map((z) => z.shape ?? 'box'));
         expect(shapes.has('sphere')).toBe(true);
         expect(shapes.has('cylinder')).toBe(true);
+      });
+
+      it('anti z-fighting: NINGUNA cara de dos sólidos es coplanaria y solapada', () => {
+        // Regresión del playtest r4 ("las paredes parpadean"): caras exactamente en
+        // el mismo plano y solapadas ⇒ shimmer/z-fighting. Pares: minX/maxX/minZ/maxZ
+        // de cada zona sólida contra TODAS las caras de las demás (incluye trasera
+        // con trasera). Los pisos no son sólidos: sus topes no compiten con nada.
+        const solids = map.zones.filter(isSolidZone);
+        const EPS = 1e-4;
+        for (let i = 0; i < solids.length; i++) {
+          const a = solids[i]!;
+          for (let j = i + 1; j < solids.length; j++) {
+            const b = solids[j]!;
+            // Solapamiento vertical (y): ambas caras existen en el mismo rango.
+            const yOverlap =
+              Math.min(zoneYMax(a), zoneYMax(b)) - Math.max(zoneYMin(a), zoneYMin(b));
+            if (yOverlap <= EPS) continue;
+            for (const [pa, pb] of [
+              [a.minX, b.minX], [a.minX, b.maxX],
+              [a.maxX, b.minX], [a.maxX, b.maxX],
+            ] as const) {
+              if (Math.abs(pa - pb) > EPS) continue;
+              const zOverlap =
+                Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
+              if (zOverlap > EPS) {
+                throw new Error(
+                  `caras X coplanarias solapadas: ${a.id} y ${b.id} en x=${pa}`,
+                );
+              }
+            }
+            for (const [pa, pb] of [
+              [a.minZ, b.minZ], [a.minZ, b.maxZ],
+              [a.maxZ, b.minZ], [a.maxZ, b.maxZ],
+            ] as const) {
+              if (Math.abs(pa - pb) > EPS) continue;
+              const xOverlap =
+                Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+              if (xOverlap > EPS) {
+                throw new Error(
+                  `caras Z coplanarias solapadas: ${a.id} y ${b.id} en z=${pa}`,
+                );
+              }
+            }
+          }
+        }
+      });
+
+      it('perímetro CERRADO: toda celda de piso del borde tiene muro exterior', () => {
+        // Regresión: los bucles de aristas solo cubrían celdas INTERIORES de la
+        // rejilla ⇒ la casa estaba abierta en su contorno (el clamp de posición
+        // la cerraba "de facto" pero visualmente y para el rayo quedaba abierta).
+        const plan = generateHousePlan(seed);
+        const B = map.bounds;
+        const C = HOUSE_CELL;
+        const W = HOUSE_COLS * C, H = HOUSE_ROWS * C;
+        const cellX0 = (c: number): number => c * C - W / 2;
+        const cellZ0 = (r: number): number => r * C - H / 2;
+        /** ¿Un muro en la banda del borde `side` cubre ≥75% del tramo de la celda? */
+        const covered = (
+          cell: { x0: number; x1: number; z0: number; z1: number },
+          side: 'N' | 'S' | 'E' | 'W',
+        ): boolean => {
+          for (const z of map.zones) {
+            if (z.kind !== 'wall') continue;
+            if (side === 'N' || side === 'S') {
+              const line = side === 'N' ? B.minZ : B.maxZ;
+              // muro horizontal apoyado en esa banda de borde
+              if (z.minZ > line + 0.4 || z.maxZ < line - 0.05) continue;
+              const ov = Math.min(z.maxX, cell.x1) - Math.max(z.minX, cell.x0);
+              if (ov >= (cell.x1 - cell.x0) * 0.75) return true;
+            } else {
+              const line = side === 'W' ? B.minX : B.maxX;
+              if (z.minX > line + 0.4 || z.maxX < line - 0.05) continue;
+              const ov = Math.min(z.maxZ, cell.z1) - Math.max(z.minZ, cell.z0);
+              if (ov >= (cell.z1 - cell.z0) * 0.75) return true;
+            }
+          }
+          return false;
+        };
+        let checked = 0;
+        for (let r = 0; r < HOUSE_ROWS; r++) {
+          for (let c = 0; c < HOUSE_COLS; c++) {
+            if (houseCell(plan, r, c) === CELL_OUT) continue;
+            const cell = { x0: cellX0(c), x1: cellX0(c) + C, z0: cellZ0(r), z1: cellZ0(r) + C };
+            const onEdge = r === 0 || r === HOUSE_ROWS - 1 || c === 0 || c === HOUSE_COLS - 1;
+            if (!onEdge) continue;
+            checked++;
+            if (r === 0 && !covered(cell, 'N')) throw new Error(`borde N abierto en (${r},${c})`);
+            if (r === HOUSE_ROWS - 1 && !covered(cell, 'S')) throw new Error(`borde S abierto en (${r},${c})`);
+            if (c === 0 && !covered(cell, 'W')) throw new Error(`borde W abierto en (${r},${c})`);
+            if (c === HOUSE_COLS - 1 && !covered(cell, 'E')) throw new Error(`borde E abierto en (${r},${c})`);
+          }
+        }
+        expect(checked).toBeGreaterThan(0); // el anillo existe en este seed
       });
 
       it('≥8 colores distintos y color de referencia definido en todo el mapa', () => {

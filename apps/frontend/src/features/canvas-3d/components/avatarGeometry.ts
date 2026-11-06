@@ -44,6 +44,17 @@ function sphere(r: number, x: number, y: number, z: number): THREE.BufferGeometr
   return new THREE.SphereGeometry(r, SPHERE_SEGS_W, SPHERE_SEGS_H).translate(x, y, z);
 }
 
+/**
+ * Ojo-bolita low-poly (playtest r4, "mejora la apariencia"): esferitas montadas
+ * SOBRE la superficie de la cabeza — leídas por el SOMBREADO (el material del
+ * avatar es uno solo: la pintura del jugador). Como la geometría es la MISMA que
+ * la de los señuelos, todos los muñecos tienen ojos y el mimetismo se conserva.
+ * El desborde (≤0.05 m) queda dentro del fleco cosmético de VISUAL_FRINGE.
+ */
+function eye(r: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  return new THREE.SphereGeometry(r, 8, 6).translate(x, y, z);
+}
+
 /** Extremidad: cápsula con rotaciones opcionales (aplicadas ANTES de trasladar). */
 function limb(
   r: number,
@@ -65,10 +76,12 @@ function flatten(g: THREE.BufferGeometry, k: number): THREE.BufferGeometry {
   return g.scale(1, 1, k);
 }
 
-/** De pie (~1.7 m): el muñeco del original — simétrico, sin cara, brazos a los lados. */
+/** De pie (~1.7 m): el muñeco del original — ojos-bolita al frente (+Z), brazos a los lados. */
 function buildStand(): THREE.BufferGeometry {
   return fuse([
     sphere(0.28, 0, 1.4, 0), // cabeza (top ~1.68)
+    eye(0.05, -0.1, 1.44, 0.26), // ojo izq (montado en la superficie, fleco OK)
+    eye(0.05, 0.1, 1.44, 0.26), // ojo der
     new THREE.CapsuleGeometry(0.31, 0.5, 4, 12).translate(0, 0.72, 0), // torso blob
     limb(0.1, 0.35, 0, 0.25, -0.38, 0.82, 0), // brazo izq (ligeramente abierto)
     limb(0.1, 0.35, 0, -0.25, 0.38, 0.82, 0), // brazo der
@@ -77,10 +90,12 @@ function buildStand(): THREE.BufferGeometry {
   ]);
 }
 
-/** Arrodillado (~1.2 m, la altura del hitbox): rodillas al frente, brazos pegados. */
+/** Arrodillado (~1.2 m, la altura del hitbox): rodillas y ojos al frente. */
 function buildCrouch(): THREE.BufferGeometry {
   return fuse([
     sphere(0.24, 0, 0.96, 0.06), // cabeza (top 1.20)
+    eye(0.045, -0.09, 1.0, 0.27), // ojo izq (sigue al yaw con el sesgo frontal)
+    eye(0.045, 0.09, 1.0, 0.27), // ojo der
     new THREE.CapsuleGeometry(0.28, 0.35, 4, 12).rotateX(0.35).translate(0, 0.52, -0.02),
     sphere(0.11, -0.16, 0.13, 0.3), // rodilla izq (sesgo frontal: sigue al yaw)
     sphere(0.11, 0.16, 0.13, 0.3), // rodilla der

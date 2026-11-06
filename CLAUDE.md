@@ -168,6 +168,7 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/18-step-15-audio.md`](docs/18-step-15-audio.md) — **V1-H audio mínimo**: motor WebAudio PROCEDURAL (cero assets: silbido seno+vibrato, hit chime, "womp" al ser atrapado, disparo, ambiente viento+pajaritos, fanfarria/derrota), silbidos server-authoritative (`domain/whistle.ts` cadencia ±25%, scheduler en el DO en HUNT, `{type:'whistle'}` con posición), regla del host (checkbox RoomForm → `?whistling=1`), posicionamiento estéreo puro (`computeSpatial`), toggle 🔊/🔇 en HUD.
 - [`docs/19-step-16-deploy.md`](docs/19-step-16-deploy.md) — **V1-I deploy a producción**: ROOMS_KV real creado, backend+frontend desplegados en el edge, smoke HTTP + E2E 8/8 de 2 navegadores contra las URLs reales. **V1 jugable en**: `chameleon-canvas.jzambranogarzon.workers.dev` (backend: `chameleon-canvas-backend.…`). CI/CD despliega en cada push a main.
 - [`docs/20-step-17-house-map.md`](docs/20-step-17-house-map.md) — **playtest r3**: (1) **silbido MANUAL del Hider** (tecla T; validación autoritativa rol/fase/cooldown; se retira el sistema periódico del Paso 15); (2) **mapa CASA 80×64**: `generateHousePlan` (anillo+cruz+cuartos por guillotina, ala completa tirada por seed ⇒ L/U no cuadrada, paletas por cuarto) + `isEdgeOpen` como verdad única muros⇔puertas con test BFS de conectividad + test de jugabilidad "salir del cuarto por la puerta"; bounds ±40/±32, Prep 75 s, Hunt 180 s.
+- [`docs/21-step-18-visual-office.md`](docs/21-step-18-visual-office.md) — **playtest r4 (rework visual "oficina")**: fix de **z-fighting** en paredes (3 causas: extensión de tramos coplanaria, esquinas de perímetro clampadas al mismo plano, `q()` redondeando `.5`; post-pase `deplanarizeProps`) + **perímetro ABIERTO** descubierto (los bucles de aristas no cubrían el borde); render spec (PCFSoft + ACES 1.2, ambiente frío #223344·0.4, sol 2048, **pool de 6 PointLights cálidas** decay 2 + lámparas instanciadas, PMREM `RoomEnvironment` local, muros 0.8/0 + suelos pulidos 0.3/0.1); **muebles de oficina SÓLIDOS** en el generador (archivadores/mesas/terminales/taburetes en esquinas de celda); ojos-bolita del avatar; `maxSpeed` 6.5. Optimizaciones: geometrías unitarias compartidas, cache de materiales, instancing de lámparas, cero allocs en el pool.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
@@ -181,7 +182,8 @@ fix del SimConfig persistido (`docs/14`) · Paso 12 ✅ mapa ALEATORIO por ronda
 `docs/16`** · **Paso 14 ✅ V1-E matchmaking por código + roster + pre-flight
 (`docs/17`)** · **Paso 15 ✅ V1-H audio mínimo + silbidos del host (`docs/18`)** ·
 **Paso 16 ✅ V1-I deploy a producción (`docs/19`)** · **Paso 17 ✅ playtest r3:
-silbido manual (T) + mapa CASA 80×64 con pasillos y cuartos (`docs/20`)**.
+silbido manual (T) + mapa CASA 80×64 con pasillos y cuartos (`docs/20`)** ·
+**Paso 18 ✅ playtest r4: rework visual oficina + fix z-fighting (`docs/21`)**.
 **V1 ESTÁ DESPLEGADA Y JUGABLE** en `https://chameleon-canvas.jzambranogarzon.workers.dev`
 (backend: `chameleon-canvas-backend.jzambranogarzon.workers.dev`): crear/unirse por
 código con amigos, nombres, lobby compartido, audio y silbidos. **Mapa v3 = CASA**

@@ -11,6 +11,7 @@
 import { ClientOnly, createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
+import * as THREE from 'three';
 import { Scene } from '@/features/canvas-3d/components/Scene';
 import { useRaycastColor } from '@/features/canvas-3d/hooks/useRaycastColor';
 import { useMouseLook, lookState } from '@/features/canvas-3d/hooks/useMouseLook';
@@ -79,7 +80,13 @@ function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
 
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
-      <Canvas shadows camera={{ position: [0, 12, 16], fov: 60 }}>
+      {/* Renderer (spec r4): sombras PCFSoft + ACESFilmic con exposición 1.2
+          para que los colores del camuflaje resalten. */}
+      <Canvas
+        shadows="soft"
+        gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+        camera={{ position: [0, 12, 16], fov: 60 }}
+      >
         {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.
             Casa 80×64: la niebla abre el rango para que los pasillos largos respiren. */}
         <color attach="background" args={['#cfdce8']} />

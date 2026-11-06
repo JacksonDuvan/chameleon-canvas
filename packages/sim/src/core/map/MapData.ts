@@ -433,6 +433,14 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
   const cellX0 = (c: number): number => c * HOUSE_CELL - W / 2;
   const cellZ0 = (r: number): number => r * HOUSE_CELL - H / 2;
   const T = 0.6; // grosor de muro
+  /**
+   * Extensión de los extremos de un muro a lo largo de SU eje para sellar
+   * esquinas: t/2−0.1 (no t/2). Con t/2 la cara del tope quedaba COPLANARIA con
+   * la cara lateral del muro perpendicular (z-fighting: "las paredes
+   * parpadean", playtest r4); con 0.1 menos, cada tope queda a 1 cm del muro
+   * vecino: esquina sellada, cero caras coplanarias (test de regresión).
+   */
+  const EXT = T / 2 - 0.1;
   const rng = makeRng((seed >>> 0) || 1);
 
   // ── Suelos: un rect por CUARTO (color propio de su paleta) ──
@@ -448,8 +456,9 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       y: 0.01,
       height: 0,
       color: rgb(pal.floor),
-      roughness: 0.95,
-      metalness: 0,
+      // Pulido sutil (spec r4): refleja las luces de techo con metalness 0.1.
+      roughness: 0.3,
+      metalness: 0.1,
     });
   }
 
@@ -474,8 +483,8 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
         y: 0.01,
         height: 0,
         color: rgb(HALL_FLOORS[hallRun % HALL_FLOORS.length]!),
-        roughness: 0.95,
-        metalness: 0,
+        roughness: 0.3, // pulido (spec r4)
+        metalness: 0.1,
       });
       hallRun++;
       c = c2 + 1;
@@ -510,22 +519,44 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
     return rgb(hallTouch ? HALL_WALL : OUTER_WALL);
   };
   /**
-   * Empuja un muro ya fusionado CLAVADO DENTRO de los límites: los muros del
-   * perímetro nacen centrados en la arista exterior (sobresaldrían 0.3 m de los
-   * bounds). El clamp los deja a ras por dentro (grosor 0.3 ahí: visual y
-   * colisión correctos, y la invariante "toda zona dentro de bounds" se mantiene).
+   * Empuja un muro ya fusionado CLAVADO DENTRO de los límites, con noción de eje
+   * (anti z-fighting del playtest r4):
+   *  - El GROSOR (perpendicular al eje largo) clava su cara exterior A RAS del
+   *    bound (sobresaldría 0.3 m).
+   *  - Las TAPAS (extremos del eje largo) se meten CAP_EPS (5 cm) hacia dentro
+   *    cuando recortan con el bound: si no, la tapa del muro horizontal y la
+   *    cara del muro perimetral vertical acabarían AMBAS exactamente en el
+   *    bound ⇒ caras coplanarias solapadas en CADA esquina ⇒ parpadeo.
+   *    Con 5 cm de margen la esquina sigue sellada (el muro perpendicular cubre
+   *    el rinconcín) y no hay dos caras en el mismo plano.
    */
-  const pushWall = (z: MapZone): void => {
-    zones.push({
-      ...z,
-      minX: q(Math.max(z.minX, -W / 2)),
-      maxX: q(Math.min(z.maxX, W / 2)),
-      minZ: q(Math.max(z.minZ, -H / 2)),
-      maxZ: q(Math.min(z.maxZ, H / 2)),
-    });
+  const CAP_EPS = 0.1; // múltiplo de 0.1: sobrevive a q() (0.05 es caso .5 y q lo borra)
+  const pushWall = (z: MapZone, along: 'x' | 'z'): void => {
+    const lo = (v: number, bound: number): number => (v < bound ? q(bound + CAP_EPS) : v);
+    const hi = (v: number, bound: number): number => (v > bound ? q(bound - CAP_EPS) : v);
+    if (along === 'z') {
+      // muro vertical: eje largo en z, grosor en x
+      zones.push({
+        ...z,
+        minX: q(Math.max(z.minX, -W / 2)),
+        maxX: q(Math.min(z.maxX, W / 2)),
+        minZ: lo(z.minZ, -H / 2),
+        maxZ: hi(z.maxZ, H / 2),
+      });
+    } else {
+      zones.push({
+        ...z,
+        minX: lo(z.minX, -W / 2),
+        maxX: hi(z.maxX, W / 2),
+        minZ: q(Math.max(z.minZ, -H / 2)),
+        maxZ: q(Math.min(z.maxZ, H / 2)),
+      });
+    }
   };
-  // Verticales: arista entre (r,c)-(r,c+1), fusión por columna de arista.
-  for (let c = 0; c < HOUSE_COLS - 1; c++) {
+  // Verticales: arista entre (r,c)-(r,c+1), fusión por columna de arista. El rango
+  // c ∈ [-1, COLS) INCLUYE las aristas del BORDE de la rejilla (celda|fuera): sin
+  // ellas la casa quedaba ABIERTA en su contorno (regresión del playtest r4).
+  for (let c = -1; c < HOUSE_COLS; c++) {
     let r = 0;
     while (r < HOUSE_ROWS) {
       if (!needWall(r, c, r, c + 1)) {
@@ -540,19 +571,20 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
         kind: 'wall',
         minX: q(x - T / 2),
         maxX: q(x + T / 2),
-        minZ: q(cellZ0(r) - T / 2),
-        maxZ: q(cellZ0(r2 + 1) + T / 2),
+        minZ: q(cellZ0(r) - EXT),
+        maxZ: q(cellZ0(r2 + 1) + EXT),
         y: 1.5,
         height: 3,
         color: wallColorFor(r, c, r, c + 1),
-        roughness: 0.92,
+        roughness: 0.8, // mate (spec visual r4)
         metalness: 0,
-      });
+      }, 'z');
       r = r2 + 1;
     }
   }
-  // Horizontales: arista entre (r,c)-(r+1,c), fusión por fila de arista.
-  for (let r = 0; r < HOUSE_ROWS - 1; r++) {
+  // Horizontales: arista entre (r,c)-(r+1,c), fusión por fila de arista. El rango
+  // r ∈ [-1, ROWS) incluye el borde N y S de la rejilla.
+  for (let r = -1; r < HOUSE_ROWS; r++) {
     let c = 0;
     while (c < HOUSE_COLS) {
       if (!needWall(r, c, r + 1, c)) {
@@ -565,16 +597,16 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       pushWall({
         id: `wall-h-${r}-${c}`,
         kind: 'wall',
-        minX: q(cellX0(c) - T / 2),
-        maxX: q(cellX0(c2 + 1) + T / 2),
+        minX: q(cellX0(c) - EXT),
+        maxX: q(cellX0(c2 + 1) + EXT),
         minZ: q(z - T / 2),
         maxZ: q(z + T / 2),
         y: 1.5,
         height: 3,
         color: wallColorFor(r, c, r + 1, c),
-        roughness: 0.92,
+        roughness: 0.8, // mate (spec visual r4)
         metalness: 0,
-      });
+      }, 'x');
       c = c2 + 1;
     }
   }
@@ -620,8 +652,47 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       }
     }
 
+    // ── Oficina low-poly (spec r4): archivadores, mesas, terminales y taburetes
+    // en las ESQUINAS de las celdas del cuarto (offset diagonal ±1.05: no pisan
+    // las estatuas/señuelos centrales —distancia 1.48 > 0.6+0.8— ni las puertas,
+    // que son aristas completas de celda y quedan a ≥0.2 m). Geometría NATIVA
+    // (Box/Cylinder) vía 'box'/'cylinder': cero cambios de wire/render. Son
+    // SÓLIDOS: el servidor los conoce (oclusión de disparos, camuflaje al
+    // abrazarlos, anti-cheat).
+    const OFFICE = {
+      cabinet: { w: 0.9, h: 2.1, d: 0.7, color: 0x6b7280, rough: 0.8, metal: 0 },
+      desk: { w: 1.6, h: 0.75, d: 0.8, color: 0x8a6b4a, rough: 0.7, metal: 0 },
+      terminal: { w: 0.6, h: 1.4, d: 0.5, color: 0x3d4450, rough: 0.5, metal: 0.3 },
+      stool: { w: 0.6, h: 0.9, d: 0.6, color: 0x44506b, rough: 0.85, metal: 0 },
+    } as const;
+    const officeKinds = ['cabinet', 'desk', 'terminal', 'stool'] as const;
+    const CORNER: ReadonlyArray<readonly [number, number]> = [
+      [-1.05, -1.05], [1.05, -1.05], [-1.05, 1.05], [1.05, 1.05],
+    ];
+    const maxOffice = cells.length >= 9 ? 5 : 3;
+    let office = 0;
+    for (let k = 0; k < cells.length && office < maxOffice; k++) {
+      if (rng.next() < 0.35) continue; // deja aire: no todas las celdas
+      const cell = cells[k]!;
+      const corner = CORNER[office % CORNER.length]!;
+      const fx = q(cellX0(cell[1]) + HOUSE_CELL / 2 + corner[0]);
+      const fz = q(cellZ0(cell[0]) + HOUSE_CELL / 2 + corner[1]);
+      const kind = officeKinds[office % officeKinds.length]!;
+      const spec = OFFICE[kind];
+      if (kind === 'stool') {
+        zones.push({ id: `room-${room.id}-stool-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'cylinder' });
+      } else {
+        zones.push({ id: `room-${room.id}-${kind}-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'box' });
+      }
+      office++;
+    }
+
     // Galleta de pared (figureWall) montada en el muro IZQUIERDO del cuarto, si
-    // ese muro existe (arista cerrada). ~55% de los cuartos.
+    // ese muro existe (arista cerrada). ~55% de los cuartos. Offsets en MÚLTIPLOS
+    // de 0.1 elegidos para que sus caras NUNCA caigan en el plano de una cara del
+    // muro (x±0.3): x+0.2 queda empotrada 10 cm y x+0.5 sobresale 20 cm al cuarto
+    // (z-fighting del playtest r4: q() redondea .5 hacia arriba y clavaba la cara
+    // trasera EXACTAMENTE en la cara del muro).
     if (rng.next() < 0.55) {
       const c = room.c0;
       const rMid = Math.floor((room.r0 + room.r1) / 2);
@@ -630,8 +701,8 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
         zones.push({
           id: `room-${room.id}-cookie`,
           kind: 'prop',
-          minX: q(x),
-          maxX: q(x + 0.3),
+          minX: q(x + 0.2),
+          maxX: q(x + 0.5),
           minZ: q(cellZ0(rMid) + HOUSE_CELL / 2 - 0.45),
           maxZ: q(cellZ0(rMid) + HOUSE_CELL / 2 + 0.45),
           y: 1.25,
@@ -645,6 +716,16 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       }
     }
   }
+
+  // ── Anti z-fighting (playtest r4): post-pase determinista ──
+  // Los props con jitter pueden caer con una cara EXACTAMENTE en el plano de un
+  // muro (q() redondea .5 hacia +∞) ⇒ shimmer al renderizar. Se recorren los
+  // pares sólidos y a todo PROP coplanario con algo se le aplica un nudge de 0.1
+  // en el eje conflictivo, ALEJÁNDOSE del otro sólido. Rejilla de 0.1 intacta,
+  // movimiento ≤0.4 m (los props viven a ≥0.75 m de puertas y a ≥1.4 m de los
+  // muros: el nudge jamás sella un paso ni pisa el spawn). Camino FRÍO, una vez
+  // por ronda; máx 4 pases.
+  deplanarizeProps(zones);
 
   return {
     id: `casa-${(seed >>> 0) || 1}`,
@@ -665,6 +746,64 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       { x: 1.4, y: 0, z: 1.4 },
     ],
   };
+}
+
+/** Verdad del post-pase: ¿las caras X (o Z) de a y b son coplanarias y solapadas? */
+function coplanarAxis(
+  a: MapZone,
+  b: MapZone,
+  axis: 'x' | 'z',
+): boolean {
+  const EPS = 1e-4;
+  const yOverlap = Math.min(zoneYMax(a), zoneYMax(b)) - Math.max(zoneYMin(a), zoneYMin(b));
+  if (yOverlap <= EPS) return false;
+  const [aLo, aHi, bLo, bHi] =
+    axis === 'x' ? [a.minX, a.maxX, b.minX, b.maxX] : [a.minZ, a.maxZ, b.minZ, b.maxZ];
+  const faces: Array<[number, number]> = [
+    [aLo, bLo], [aLo, bHi], [aHi, bLo], [aHi, bHi],
+  ];
+  for (const [pa, pb] of faces) {
+    if (Math.abs(pa - pb) > EPS) continue;
+    if (axis === 'x') {
+      const ov = Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
+      if (ov > EPS) return true;
+    } else {
+      const ov = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+      if (ov > EPS) return true;
+    }
+  }
+  return false;
+}
+
+/** Nudge determinista de props coplanarios (ver bloque de llamada). */
+function deplanarizeProps(zones: MapZone[]): void {
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (let i = 0; i < zones.length; i++) {
+      const a = zones[i]!;
+      if (a.kind !== 'prop') continue; // la estructura (muros) no se toca
+      for (let j = 0; j < zones.length; j++) {
+        if (i === j) continue;
+        const b = zones[j]!;
+        if (!isSolidZone(b)) continue;
+        let axis: 'x' | 'z' | null = null;
+        if (coplanarAxis(a, b, 'x')) axis = 'x';
+        else if (coplanarAxis(a, b, 'z')) axis = 'z';
+        if (axis === null) continue;
+        // Separa ALEJÁNDOLO del otro sólido (según centros) — 0.1 en la rejilla.
+        if (axis === 'x') {
+          const dir = (a.minX + a.maxX) / 2 >= (b.minX + b.maxX) / 2 ? 0.1 : -0.1;
+          zones[i] = { ...a, minX: q(a.minX + dir), maxX: q(a.maxX + dir) };
+        } else {
+          const dir = (a.minZ + a.maxZ) / 2 >= (b.minZ + b.maxZ) / 2 ? 0.1 : -0.1;
+          zones[i] = { ...a, minZ: q(a.minZ + dir), maxZ: q(a.maxZ + dir) };
+        }
+        moved = true;
+        break; // re-evalúa este prop desde el principio en el siguiente pase
+      }
+    }
+    if (!moved) return;
+  }
 }
 
 /**

@@ -31,7 +31,9 @@ const HZ = 30;
 
 export const DEFAULT_SIM_CONFIG: SimConfig = {
   tickHz: HZ,
-  maxSpeed: 6,
+  // Movilidad (playtest r4): 6.5 m/s — la casa 80×64 pide un paso más ágil sin
+  // romper la "velocidad única" del original (el clamp anti-trampas usa este valor).
+  maxSpeed: 6.5,
   // Alcance de ARMA (no de "toque"): con 3 m el disparo en FPP "no funcionaba"
   // (feedback del playtest). En la casa 80×64 los MUROS hacen la oclusión real;
   // el alcance solo delimita el tiro dentro de cuartos/pasillos.
