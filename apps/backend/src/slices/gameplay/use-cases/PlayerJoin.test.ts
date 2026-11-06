@@ -42,7 +42,7 @@ describe('PlayerJoin', () => {
 
   it('Err RoomFull al alcanzar el cupo', async () => {
     const { repo, join } = setup();
-    repo.seed(new Room('r1', { maxPlayers: 1, whistling: false, whistleEverySec: 14 }));
+    repo.seed(new Room('r1', { maxPlayers: 1 }));
     await join.execute({ roomId: 'r1', playerId: 'p0', displayName: 'a' });
     expectErr(
       await join.execute({ roomId: 'r1', playerId: 'p1', displayName: 'b' }),

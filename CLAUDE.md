@@ -167,6 +167,7 @@ con React 19), **Vite 6**, `@cloudflare/vite-plugin`. Tests: Vitest 4.1+ con
 - [`docs/17-step-14-matchmaking.md`](docs/17-step-14-matchmaking.md) — **V1-E matchmaking por código**: slice `matchmaking` (hexagonal completo: código Crockford base32 en `@shared`, `CreateRoom`/`ListRooms` + `KvRoomRegistry` con TTL, rutas Hono RPC), roster en vivo (`{type:'roster'}` en cambios de roster, camino frío), **pre-flight** `GET /api/rooms/:roomId/status` (read-only; evita reintento infinito al unirse a ronda en curso), RoomForm/PlayerList reales, sesión en sessionStorage. Verificado E2E 2 navegadores.
 - [`docs/18-step-15-audio.md`](docs/18-step-15-audio.md) — **V1-H audio mínimo**: motor WebAudio PROCEDURAL (cero assets: silbido seno+vibrato, hit chime, "womp" al ser atrapado, disparo, ambiente viento+pajaritos, fanfarria/derrota), silbidos server-authoritative (`domain/whistle.ts` cadencia ±25%, scheduler en el DO en HUNT, `{type:'whistle'}` con posición), regla del host (checkbox RoomForm → `?whistling=1`), posicionamiento estéreo puro (`computeSpatial`), toggle 🔊/🔇 en HUD.
 - [`docs/19-step-16-deploy.md`](docs/19-step-16-deploy.md) — **V1-I deploy a producción**: ROOMS_KV real creado, backend+frontend desplegados en el edge, smoke HTTP + E2E 8/8 de 2 navegadores contra las URLs reales. **V1 jugable en**: `chameleon-canvas.jzambranogarzon.workers.dev` (backend: `chameleon-canvas-backend.…`). CI/CD despliega en cada push a main.
+- [`docs/20-step-17-house-map.md`](docs/20-step-17-house-map.md) — **playtest r3**: (1) **silbido MANUAL del Hider** (tecla T; validación autoritativa rol/fase/cooldown; se retira el sistema periódico del Paso 15); (2) **mapa CASA 80×64**: `generateHousePlan` (anillo+cruz+cuartos por guillotina, ala completa tirada por seed ⇒ L/U no cuadrada, paletas por cuarto) + `isEdgeOpen` como verdad única muros⇔puertas con test BFS de conectividad + test de jugabilidad "salir del cuarto por la puerta"; bounds ±40/±32, Prep 75 s, Hunt 180 s.
 
 **Plan por pasos:** Paso 1 ✅ scaffolding · Paso 2 ✅ dominio del backend · Paso 3 ✅
 DO + sockets (wire binario) · Paso 4 ✅ cliente 3D R3F + netcode cliente · Paso 5 ✅
@@ -179,16 +180,18 @@ fix del SimConfig persistido (`docs/14`) · Paso 12 ✅ mapa ALEATORIO por ronda
 (wire v5, `docs/15`) · **Paso 13 ✅ poses de mimetismo caja/barril (wire v6) — ver
 `docs/16`** · **Paso 14 ✅ V1-E matchmaking por código + roster + pre-flight
 (`docs/17`)** · **Paso 15 ✅ V1-H audio mínimo + silbidos del host (`docs/18`)** ·
-**Paso 16 ✅ V1-I deploy a producción (`docs/19`)**.
+**Paso 16 ✅ V1-I deploy a producción (`docs/19`)** · **Paso 17 ✅ playtest r3:
+silbido manual (T) + mapa CASA 80×64 con pasillos y cuartos (`docs/20`)**.
 **V1 ESTÁ DESPLEGADA Y JUGABLE** en `https://chameleon-canvas.jzambranogarzon.workers.dev`
 (backend: `chameleon-canvas-backend.jzambranogarzon.workers.dev`): crear/unirse por
-código con amigos, nombres, lobby compartido, audio y silbidos del host. CI/CD
-despliega backend→frontend en cada push a `main`.
+código con amigos, nombres, lobby compartido, audio y silbidos. **Mapa v3 = CASA**
+(80×64, pasillos + cuartos, no cuadrada; el Hider silba con T). CI/CD despliega
+backend→frontend en cada push a `main`.
 **El objetivo es lanzar una V1**:
 clon *lite* web jugable/divertido/fiel, gráficos low-poly estilizados **secundarios**.
 El corte y la "definición de done" de V1 están en
 **[`docs/09-v1-scope.md`](docs/09-v1-scope.md)** (backlog completo en [`docs/06`](docs/06-roadmap.md)).
-**Siguiente:** playtest de balance con gente real (V1-D). Al continuar
+**Siguiente:** playtest de balance de la casa (Prep 75 / Hunt 180 / densidad). Al continuar
 en otra sesión: lee **`docs/09`** (V1) y `docs/06` (backlog), el `docs/` del paso y la
 skill relevante.
 

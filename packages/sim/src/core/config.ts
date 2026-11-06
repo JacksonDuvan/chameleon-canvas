@@ -33,18 +33,19 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   tickHz: HZ,
   maxSpeed: 6,
   // Alcance de ARMA (no de "toque"): con 3 m el disparo en FPP "no funcionaba"
-  // (feedback del playtest). En el pueblo 48×48 NO cruza el mapa entero a propósito:
-  // el Seeker tiene que acercarse a los barrios para barrerlos.
+  // (feedback del playtest). En la casa 80×64 los MUROS hacen la oclusión real;
+  // el alcance solo delimita el tiro dentro de cuartos/pasillos.
   catchRange: 30,
   playerRadius: 0.5,
   eyeHeight: 1.5,
-  // Pueblo 48×48 (mapa v2): más terreno que recorrer para esconderse y para barrer.
-  // Prep 60 s: feedback del playtest ("agrega más tiempo a los Hiders para esconderse").
-  prepDurationTicks: HZ * 60, // 60 s
-  huntDurationTicks: HZ * 120, // 120 s
+  // CASA 80×64 (mapa v3, playtest r3): pasillos + cuartos ⇒ más terreno y más
+  // puertas que revisar. Prep 75 s (llegar al escondite) y Hunt 180 s (barrer la
+  // casa) — balance sujeto al próximo playtest.
+  prepDurationTicks: HZ * 75, // 75 s
+  huntDurationTicks: HZ * 180, // 180 s
   colorLockTicks: HZ * 1, // 1 s
   // DEBE coincidir con DEFAULT_MAP.bounds (una sola verdad efectiva; test lo fuerza).
-  bounds: { minX: -24, maxX: 24, minY: 0, maxY: 5, minZ: -24, maxZ: 24 },
+  bounds: { minX: -40, maxX: 40, minY: 0, maxY: 5, minZ: -32, maxZ: 32 },
   camoMovePenalty: 0.85, // moverse a máxima velocidad te delata casi por completo
   ammoLimitEnabled: false, // base fiel al original: sin límite (el modo estricto es opt-in)
   shotAmmo: 10, // munición inicial del modo limitado

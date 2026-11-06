@@ -1,5 +1,10 @@
 # 18 · Paso 15 — V1-H: audio mínimo (SFX + ambiente + silbidos del host)
 
+> ⚠ **REWORK (Paso 17, [`docs/20`](20-step-17-house-map.md))**: el sistema de
+> silbidos PERIÓDICO automático descrito abajo se retiró por feedback del
+> playtest; ahora el silbido es una ACCIÓN MANUAL del Hider (tecla T). El motor
+> de audio procedural, el posicionamiento estéreo y el resto de SFX SIGUEN vigentes.
+
 > Épica **V1-H** del charter ([`docs/09`](09-v1-scope.md), backlog P2.2): "SFX de
 > captura + ambiente (silbido/whistling opcional)". "Hecho cuando: con la regla
 > activa, los Hiders emiten silbidos audibles/posicionales" (roadmap P2.2).

@@ -13,13 +13,18 @@ import type { WorldState } from './entities/WorldState';
 import { PlayerState } from './entities/PlayerState';
 import type { Rng } from './rng';
 
-/** Añade un jugador en Lobby con posición de spawn determinista (rejilla). */
+/**
+ * Añade un jugador en Lobby con posición de spawn determinista (rejilla).
+ * Rejilla 5×5 con paso 1.4 m (±2.8 m): cabe en el HALL CENTRAL de la casa
+ * (intersección de la cruz, 8×8 m libre de sólidos) sin pisar los muros de los
+ * bloques, que nacen en x=±4 / z=±4. Paso > diámetro del jugador (1 m).
+ */
 export function spawnPlayer(world: WorldState, id: string): PlayerState {
   const existing = world.players.get(id);
   if (existing) return existing;
   const i = world.players.size;
   const p = new PlayerState(id, 'hider');
-  p.pos.setMut(((i % 5) - 2) * 2, 0, (Math.floor(i / 5) - 2) * 2);
+  p.pos.setMut(((i % 5) - 2) * 1.4, 0, (Math.floor(i / 5) - 2) * 1.4);
   world.players.set(id, p);
   return p;
 }

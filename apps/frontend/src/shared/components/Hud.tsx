@@ -272,7 +272,7 @@ export function Hud({
           <span className="hud-chip hud-chip--muted">
             {localRole === 'seeker'
               ? 'WASD mover · ratón mirar · click disparar'
-              : 'WASD mover · ratón mirar · E absorber · R pose'}
+              : 'WASD mover · ratón mirar · E absorber · R pose · T silbar'}
           </span>
           <AudioToggle />
           <span className="hud-chip hud-chip--muted">{connected ? '● conectado' : '○ desconectado'}</span>

@@ -173,12 +173,12 @@ export function Environment() {
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-left={-52}
+        shadow-camera-right={52}
+        shadow-camera-top={52}
+        shadow-camera-bottom={-52}
         shadow-camera-near={4}
-        shadow-camera-far={75}
+        shadow-camera-far={110}
         shadow-bias={-0.0004}
         shadow-normalBias={0.05}
       />

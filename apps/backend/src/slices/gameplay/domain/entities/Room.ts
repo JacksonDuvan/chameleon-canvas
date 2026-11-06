@@ -13,16 +13,11 @@ import { Player } from './Player';
 
 export interface RoomConfig {
   readonly maxPlayers: number;
-  readonly whistling: boolean; // regla opcional de silbidos (pista sonora)
-  /** Cadencia base (s) entre silbidos de cada Hider (V1-H; solo si `whistling`). */
-  readonly whistleEverySec: number;
 }
 
-export const DEFAULT_ROOM_CONFIG: RoomConfig = {
-  maxPlayers: 12,
-  whistling: false,
-  whistleEverySec: 14,
-};
+export const DEFAULT_ROOM_CONFIG: RoomConfig = { maxPlayers: 12 };
+// V1-H rework (playtest r3): el silbido pasó de regla periódica del host a
+// ACCIÓN MANUAL del Hider (tecla T) — ver GameRoomDO.handleWhistle.
 
 export class Room {
   readonly id: string;

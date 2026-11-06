@@ -4,7 +4,18 @@ import { PlayerState } from './entities/PlayerState';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config';
 import { makeRng } from './rng';
 import { step } from './step';
-import type { MapData } from './map/MapData';
+import {
+  CELL_HALL,
+  HOUSE_CELL,
+  HOUSE_COLS,
+  HOUSE_ROWS,
+  generateHousePlan,
+  generateMap,
+  houseCell,
+  isEdgeOpen,
+  type HouseRoom,
+  type MapData,
+} from './map/MapData';
 import { KinematicPhysicsWorld } from '../physics/KinematicPhysicsWorld';
 import { ActionKind, type GamePhase, type UserCommand } from '@shared/protocol';
 
@@ -130,8 +141,9 @@ describe('step — movimiento y anti-trampas', () => {
     // Mapa ABIERTO (sin muros): aísla el clamp anti-trampas de la colisión — en el
     // mapa real el muro perimetral frena antes de llegar al límite duro.
     const openMap: MapData = { id: 'open', bounds: w.config.bounds, floorColor: 0xff, zones: [], spawns: [] };
-    // empuja repetidamente contra el borde +x
-    for (let i = 0; i < 100; i++) step(w, [mkCmd('h', { moveX: 1 })], DT, rng, physics, openMap);
+    // empuja repetidamente contra el borde +x (mapa v3 80 m: 19.9→40 ≈ 20 m a 6 m/s
+    // = 100 ticks; 200 para cubrir el arranque desde parado con margen).
+    for (let i = 0; i < 200; i++) step(w, [mkCmd('h', { moveX: 1 })], DT, rng, physics, openMap);
     expect(w.players.get('h')!.pos.x).toBe(w.config.bounds.maxX);
   });
 });
@@ -423,5 +435,63 @@ describe('step — determinismo', () => {
     }
     expect(serialize(a)).toEqual(serialize(b));
     expect(a.players.get('h')!.role).toBe('seeker'); // cayó con el disparo del tick 3
+  });
+});
+
+describe('jugabilidad del mapa CASA (playtest r3): colisión respeta las puertas', () => {
+  it('un Hider SALDRÁ de su cuarto caminando hacia su puerta (muros reales)', () => {
+    // El test más honesto de "la casa se puede jugar": con el mapa REAL (muros
+    // fusionados por aristas) un Hider en el centro de un cuarto debe poder
+    // cruzar su puerta al pasillo. Fallaría si un cuarto quedara sellado (BFS),
+    // si la fusión de muros tapara un hueco, o si la colisión pasara lo imposible.
+    const seed = 1;
+    const map = generateMap(seed);
+    const plan = generateHousePlan(seed);
+    const phys = new KinematicPhysicsWorld(16, map);
+
+    // Celda→mundo (misma convención del generador).
+    const x0 = (c: number): number => c * HOUSE_CELL - (HOUSE_COLS * HOUSE_CELL) / 2;
+    const z0 = (r: number): number => r * HOUSE_CELL - (HOUSE_ROWS * HOUSE_CELL) / 2;
+
+    // Busca el primer cuarto con PUERTA al pasillo y su punto de cruce.
+    let doorX = 0;
+    let doorZ = 0;
+    let room: HouseRoom | null = null;
+    outer: for (const rm of plan.rooms) {
+      for (let r = rm.r0; r <= rm.r1; r++) {
+        for (let c = rm.c0; c <= rm.c1; c++) {
+          for (const d of [[0, 1], [0, -1], [1, 0], [-1, 0]] as const) {
+            const r2 = r + d[0];
+            const c2 = c + d[1];
+            if (houseCell(plan, r2, c2) === CELL_HALL && isEdgeOpen(plan, r, c, r2, c2)) {
+              doorX = x0(c) + HOUSE_CELL / 2 + d[1] * (HOUSE_CELL / 2);
+              doorZ = z0(r) + HOUSE_CELL / 2 + d[0] * (HOUSE_CELL / 2);
+              room = rm;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+    expect(room).not.toBeNull();
+
+    const cx = (x0(room!.c0) + x0(room!.c1 + 1)) / 2;
+    const cz = (z0(room!.r0) + z0(room!.r1 + 1)) / 2;
+    const w = worldInPhase('prep', [{ id: 'h', role: 'hider', x: cx, z: cz }]);
+    w.phaseEndsAtTick = w.tick + 10000;
+
+    const len = Math.hypot(doorX - cx, doorZ - cz);
+    const ux = (doorX - cx) / len;
+    const uz = (doorZ - cz) / len;
+    let seq = 0;
+    for (let i = 0; i < 300; i++) {
+      // Camina recto hacia la puerta (300 ticks = 60 m de sobra).
+      step(w, [mkCmd('h', { seq: ++seq, moveX: ux, moveZ: uz })], DT, rng, phys, map);
+    }
+    const p = w.players.get('h')!;
+    const inside =
+      p.pos.x > x0(room!.c0) && p.pos.x < x0(room!.c1 + 1) &&
+      p.pos.z > z0(room!.r0) && p.pos.z < z0(room!.r1 + 1);
+    expect(inside, `quedó atascado en (${p.pos.x}, ${p.pos.z}) del cuarto ${room!.id}`).toBe(false);
   });
 });

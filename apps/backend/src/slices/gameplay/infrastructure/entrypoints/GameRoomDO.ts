@@ -16,8 +16,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '@/shared/env';
-import { Room, DEFAULT_ROOM_CONFIG, type RoomConfig } from '@/slices/gameplay/domain/entities/Room';
-import { whistleDelaySec } from '@/slices/gameplay/domain/whistle';
+import { Room, DEFAULT_ROOM_CONFIG } from '@/slices/gameplay/domain/entities/Room';
 import { DoStorageRoomRepository } from '@/slices/gameplay/infrastructure/adapters/DoStorageRoomRepository';
 import { SingleRoomRepository } from '@/slices/gameplay/infrastructure/adapters/SingleRoomRepository';
 import { PlayerJoin } from '@/slices/gameplay/use-cases/PlayerJoin';
@@ -52,17 +51,13 @@ const KEYFRAME_EVERY = TICK_HZ; // un keyframe ~cada segundo
 const PERSIST_EVERY = TICK_HZ * 2; // persistir ~cada 2 s
 
 /**
- * V1-H — config de la sala FRESH a partir de los query params del PRIMER join
- * (el host crea la sala al conectarse). Traducción de protocolo (adaptador):
- * sanea el rango de la cadencia; defaults del dominio si falta.
+ * V1-H rework (playtest r3) — cooldown del silbido MANUAL del Hider: el mismo
+ * jugador lo dispara (tecla T) para dar al Seeker una pista posicional en el
+ * mapa grande. Rate-limit del ADAPTADOR sobre un mensaje de control (anit-spam);
+ * la validación de REGLA (rol/fase) también vive aquí: el silbido es una PISTA
+ * de presentación, no estado de simulación.
  */
-function roomConfigFromQuery(url?: URL): RoomConfig {
-  const whistling = url?.searchParams.get('whistling') === '1';
-  const raw = Number(url?.searchParams.get('whistleEverySec'));
-  const whistleEverySec =
-    Number.isFinite(raw) && raw >= 1 && raw <= 60 ? Math.round(raw) : DEFAULT_ROOM_CONFIG.whistleEverySec;
-  return { maxPlayers: DEFAULT_ROOM_CONFIG.maxPlayers, whistling, whistleEverySec };
-}
+const WHISTLE_COOLDOWN_MS = 2000;
 
 interface Attachment {
   playerId: string;
@@ -93,8 +88,8 @@ export class GameRoomDO extends DurableObject<Env> {
   // determinista; el cliente genera el mismo con el mapSeed que viaja en el snapshot.
   private currentMap: MapData = DEFAULT_MAP;
   private currentMapSeed = 1;
-  // ── V1-H: silbidos ── cuándo le toca silbar a cada Hider vivo (epoch ms).
-  // Estado VOLÁTIL de presentación: no se persiste ni afecta a la simulación.
+  // ── V1-H rework: cooldown de silbido por jugador (epoch ms). Estado VOLÁTIL de
+  // presentación: no se persiste ni afecta a la simulación.
   private readonly whistleNextAt = new Map<string, number>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -135,7 +130,7 @@ export class GameRoomDO extends DurableObject<Env> {
     const roomId = parts[parts.indexOf('rooms') + 1] ?? url.searchParams.get('room') ?? '';
     if (!roomId) return new Response('Missing room id', { status: 400 });
 
-    await this.ensureRoom(roomId, url);
+    await this.ensureRoom(roomId);
 
     // Traducción de protocolo (adaptador): sanea lo que llega por query param.
     // Misma regla que createRoomSchema del lado HTTP (trim, 1..24, no vacío).
@@ -230,7 +225,7 @@ export class GameRoomDO extends DurableObject<Env> {
     );
   }
 
-  private async ensureRoom(roomId: string, url?: URL): Promise<void> {
+  private async ensureRoom(roomId: string): Promise<void> {
     // Ya cargada en memoria (p. ej. rehidratada por el constructor tras un wake): aun
     // así reconcilia contra los sockets vivos ANTES de aceptar un nuevo jugador. Sin
     // esto, una sala persistida en fase != lobby con jugadores fantasma rechazaría a
@@ -245,9 +240,7 @@ export class GameRoomDO extends DurableObject<Env> {
       this.live.set(loaded.value);
       this.reconcileRoster(); // poda jugadores persistidos que ya no están conectados
     } else {
-      // V1-H: la regla de silbidos la fija el HOST al crear la sala (query params
-      // del primer join); solo aplica a la creación FRESH (unirse no la cambia).
-      this.live.set(new Room(roomId, roomConfigFromQuery(url)));
+      this.live.set(new Room(roomId));
       await this.ctx.storage.put('roomId', roomId);
     }
   }
@@ -286,6 +279,9 @@ export class GameRoomDO extends DurableObject<Env> {
         a: msg.a ?? 255,
       });
       if (!res.ok) ws.send(JSON.stringify({ type: 'error', cmd: 'color', kind: res.error.kind }));
+    } else if (msg.type === 'whistle') {
+      // V1-H rework: silbido MANUAL del Hider (valida rol/fase/cooldown y difunde).
+      this.handleWhistle(playerId, room);
     }
   }
 
@@ -446,10 +442,6 @@ export class GameRoomDO extends DurableObject<Env> {
     room.world.rngState = this.rng.getState();
     this.inbox.length = 0; // reutiliza el array (sin reasignar)
 
-    // 1b) V1-H — silbidos de los Hiders (regla del host): pista sonora en HUNT.
-    //     Camino frío salvo el propio silbido (uno por Hider cada ~base s).
-    this.tickWhistles(room);
-
     // 2) Transmitir: KEYFRAME (recién unidos / roster cambiado / periódico) o DELTA.
     this.broadcast(room);
 
@@ -487,43 +479,21 @@ export class GameRoomDO extends DurableObject<Env> {
   }
 
   /**
-   * V1-H — scheduler de silbidos: en HUNT, cada Hider vivo emite un silbido cada
-   * `whistleEverySec·(1±25%)` (regla pura en `domain/whistle.ts`). La CADENCIA es
-   * regla de dominio; el instante exacto es PRESENTACIÓN: usa reloj de pared y
-   * entropía del ADAPTADOR (no toca la sim ni su RNG — un silbido es una pista
-   * sonora, no cambia el desenlace; ver `workers-memory-optimization` para por
-   * qué el estado volátil no se persiste). Fuera de HUNT se limpia.
+   * V1-H rework (playtest r3) — silbido MANUAL: el Hider lo dispara (tecla T del
+   * cliente ⇒ control JSON). Reglas (autoritativas): solo en HUNT, solo Hiders
+   * vivos, con cooldown anti-spam. Difunde a TODOS (el silbador se oye a sí
+   * mismo: confirma que la pista salió). Presentación pura: no toca la sim.
    */
-  private tickWhistles(room: Room): void {
-    if (!room.config.whistling || room.world.phase !== 'hunt') {
-      if (this.whistleNextAt.size > 0) this.whistleNextAt.clear();
-      return;
-    }
+  private handleWhistle(playerId: string, room: Room): void {
+    if (room.world.phase !== 'hunt') return; // en lobby/prep no hay pistas que dar
+    const p = room.world.players.get(playerId);
+    if (!p || p.role !== 'hider' || p.caught) return; // solo Hiders vivos
     const now = Date.now();
-    for (const [id, p] of room.world.players) {
-      if (p.role !== 'hider' || p.caught) {
-        this.whistleNextAt.delete(id); // atrapado/convertido: no silba
-        continue;
-      }
-      const at = this.whistleNextAt.get(id);
-      if (at === undefined) {
-        // Primer silbido tras un delay (el Seeker no oye en el instante 0).
-        this.whistleNextAt.set(
-          id,
-          now + whistleDelaySec(room.config.whistleEverySec, Math.random()) * 1000,
-        );
-        continue;
-      }
-      if (now >= at) {
-        this.sendControl(
-          JSON.stringify({ type: 'whistle', playerId: id, x: p.pos.x, y: p.pos.y, z: p.pos.z }),
-        );
-        this.whistleNextAt.set(
-          id,
-          now + whistleDelaySec(room.config.whistleEverySec, Math.random()) * 1000,
-        );
-      }
-    }
+    if (now < (this.whistleNextAt.get(playerId) ?? 0)) return; // cooldown
+    this.whistleNextAt.set(playerId, now + WHISTLE_COOLDOWN_MS);
+    this.sendControl(
+      JSON.stringify({ type: 'whistle', playerId, x: p.pos.x, y: p.pos.y, z: p.pos.z }),
+    );
   }
 
   /** Envía un mensaje de control JSON a todos los sockets vivos (camino frío). */

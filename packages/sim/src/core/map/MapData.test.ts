@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_MAP, generateMap, isSolidZone, referenceColorAt, type MapData } from './MapData';
+import {
+  DEFAULT_MAP,
+  generateMap,
+  generateHousePlan,
+  houseCell,
+  isEdgeOpen,
+  isSolidZone,
+  referenceColorAt,
+  CELL_OUT,
+  CELL_ROOM,
+  HOUSE_COLS,
+  HOUSE_ROWS,
+  type MapData,
+} from './MapData';
 import { ColorRGBA } from '../value-objects/ColorRGBA';
 import { DEFAULT_SIM_CONFIG } from '../config';
 import { initialWorld } from '../entities/WorldState';
@@ -100,7 +113,7 @@ describe('DEFAULT_MAP', () => {
   });
 });
 
-describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () => {
+describe('generateMap — CASA procedural: pasillos + cuartos, grande e irregular (playtest r3)', () => {
   // Muestreo de semillas variadas para los tests de invariantes.
   const SEEDS = [1, 2, 3, 7, 42, 100, 999, 123456, 0xdeadbeef, 0];
 
@@ -135,9 +148,10 @@ describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () 
     describe(`invariantes @ seed=${seed}`, () => {
       const map = generateMap(seed);
 
-      it('bounds = SimConfig y recinto grande (≥44 m)', () => {
+      it('bounds = SimConfig y CASA GRANDE (≥76×60 m)', () => {
         expect(map.bounds).toEqual(DEFAULT_SIM_CONFIG.bounds);
-        expect(map.bounds.maxX - map.bounds.minX).toBeGreaterThanOrEqual(44);
+        expect(map.bounds.maxX - map.bounds.minX).toBeGreaterThanOrEqual(76);
+        expect(map.bounds.maxZ - map.bounds.minZ).toBeGreaterThanOrEqual(60);
       });
 
       it('toda zona cabe dentro de los límites', () => {
@@ -149,7 +163,34 @@ describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () 
         }
       });
 
-      it('la rejilla de spawn queda LIBRE de sólidos (nadie nace en una casa)', () => {
+      it('NO cuadrado: la huella es irregular (recortes de esquina del anillo)', () => {
+        // El plano de la casa dice qué celdas son "fuera": debe haber celdas OUT
+        // en el BORDE de la rejilla (esquinas recortadas) y la huella no llena el
+        // rectángulo de bounds.
+        const plan = generateHousePlan(seed);
+        const edge = [...plan.rooms].reduce((acc, rm) => acc + (rm.c1 - rm.c0 + 1) * (rm.r1 - rm.r0 + 1), 0);
+        const floors = map.zones.filter((z) => z.kind === 'floor');
+        const area = floors.reduce(
+          (acc, f) => acc + (f.maxX - f.minX) * (f.maxZ - f.minZ),
+          0,
+        );
+        const total = (map.bounds.maxX - map.bounds.minX) * (map.bounds.maxZ - map.bounds.minZ);
+        expect(edge).toBeGreaterThan(0);
+        expect(area / total).toBeLessThan(0.95); // no es un rectángulo lleno
+        expect(area / total).toBeGreaterThan(0.5); // …pero sigue siendo una casa grande
+      });
+
+      it('CASA: ≥10 cuartos con color propio + pasillos', () => {
+        const rooms = map.zones.filter((z) => z.id.startsWith('room-floor'));
+        expect(rooms.length).toBeGreaterThanOrEqual(10);
+        const halls = map.zones.filter((z) => z.id.startsWith('hall-floor'));
+        expect(halls.length).toBeGreaterThanOrEqual(6);
+        // Colores de cuarto DIVERSOS (camuflaje distinto por cuarto).
+        const roomColors = new Set(rooms.map((z) => z.color));
+        expect(roomColors.size).toBeGreaterThanOrEqual(6);
+      });
+
+      it('la rejilla de spawn (hall central) queda LIBRE de sólidos', () => {
         const world = initialWorld(seed);
         const r = DEFAULT_SIM_CONFIG.playerRadius;
         for (let i = 0; i < 25; i++) {
@@ -164,10 +205,10 @@ describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () 
         }
       });
 
-      it('miniciudad + mimetismo: ≥16 muros, ≥6 figure, ≥4 figureWall, esfera+cilindro', () => {
-        expect(map.zones.filter((z) => z.kind === 'wall').length).toBeGreaterThanOrEqual(16);
-        expect(map.zones.filter((z) => z.shape === 'figure').length).toBeGreaterThanOrEqual(6);
-        expect(map.zones.filter((z) => z.shape === 'figureWall').length).toBeGreaterThanOrEqual(4);
+      it('mimetismo por cuarto: ≥10 figure, ≥6 figureWall, esfera+cilindro, ≥24 muros', () => {
+        expect(map.zones.filter((z) => z.kind === 'wall').length).toBeGreaterThanOrEqual(24);
+        expect(map.zones.filter((z) => z.shape === 'figure').length).toBeGreaterThanOrEqual(10);
+        expect(map.zones.filter((z) => z.shape === 'figureWall').length).toBeGreaterThanOrEqual(6);
         const shapes = new Set(map.zones.map((z) => z.shape ?? 'box'));
         expect(shapes.has('sphere')).toBe(true);
         expect(shapes.has('cylinder')).toBe(true);
@@ -181,6 +222,90 @@ describe('generateMap — mapa aleatorio por ronda (feedback del playtest)', () 
         for (let x = map.bounds.minX; x <= map.bounds.maxX; x += 5) {
           for (let z = map.bounds.minZ; z <= map.bounds.maxZ; z += 5) {
             expect(referenceColorAt(map, x, z, out).a).toBe(255);
+          }
+        }
+      });
+    });
+  }
+
+  // ── El PLANO de la casa (verdad compartida de muros/puertas): conectividad ──
+  for (const seed of SEEDS.slice(0, 6)) {
+    describe(`plano @ seed=${seed}`, () => {
+      const plan = generateHousePlan(seed);
+
+      /** ¿La celda (r,c) es piso (pasillos o cuartos)? */
+      const isFloorCell = (r: number, c: number): boolean =>
+        houseCell(plan, r, c) !== CELL_OUT;
+
+      it('CONECTIVIDAD: BFS desde el spawn alcanza TODA celda de cuarto y pasillo', () => {
+        // Nadie debe quedar encerrado: toda celda de piso es alcanzable desde el
+        // hall central (spawn) usando la MISMA verdad (`isEdgeOpen`) que emite
+        // los muros del mapa — si esto pasa, no hay cuartos sellados.
+        const cr = HOUSE_ROWS >> 1;
+        const cc = HOUSE_COLS >> 1;
+        expect(isFloorCell(cr, cc)).toBe(true); // el spawn es piso
+        const seen = new Set<number>([cr * HOUSE_COLS + cc]);
+        const queue: number[] = [cr * HOUSE_COLS + cc];
+        const DIRS: ReadonlyArray<[number, number]> = [
+          [0, 1], [0, -1], [1, 0], [-1, 0],
+        ];
+        while (queue.length > 0) {
+          const cur = queue.pop()!;
+          const r = Math.floor(cur / HOUSE_COLS);
+          const c = cur % HOUSE_COLS;
+          for (const [dr, dc] of DIRS) {
+            const r2 = r + dr;
+            const c2 = c + dc;
+            const key = r2 * HOUSE_COLS + c2;
+            if (seen.has(key)) continue;
+            if (!isFloorCell(r2, c2)) continue;
+            if (!isEdgeOpen(plan, r, c, r2, c2)) continue;
+            seen.add(key);
+            queue.push(key);
+          }
+        }
+        let floors = 0;
+        for (let r = 0; r < HOUSE_ROWS; r++) {
+          for (let c = 0; c < HOUSE_COLS; c++) {
+            if (isFloorCell(r, c)) floors++;
+          }
+        }
+        expect(seen.size).toBe(floors); // alcanzables == totales
+      });
+
+      it('cada cuarto tiene ≥1 PUERTA en su perímetro (a pasillo u otro cuarto)', () => {
+        for (const room of plan.rooms) {
+          let doors = 0;
+          for (let r = room.r0; r <= room.r1; r++) {
+            for (let c = room.c0; c <= room.c1; c++) {
+              for (const [dr, dc] of [[0, 1], [0, -1], [1, 0], [-1, 0]] as const) {
+                const r2 = r + dr;
+                const c2 = c + dc;
+                if (r2 < 0 || r2 >= HOUSE_ROWS || c2 < 0 || c2 >= HOUSE_COLS) continue;
+                if (isEdgeOpen(plan, r, c, r2, c2) && houseCell(plan, r2, c2) !== CELL_OUT) {
+                  // abierta hacia OTRA celda (otro cuarto o pasillo)
+                  const sameRoom = r2 >= room.r0 && r2 <= room.r1 && c2 >= room.c0 && c2 <= room.c1;
+                  if (!sameRoom) doors++;
+                }
+              }
+            }
+          }
+          expect(doors, `cuarto ${room.id} sin puertas`).toBeGreaterThanOrEqual(1);
+        }
+      });
+
+      it('los cuartos son RECTÁNGULOS disjuntos y todos tienen celdas ROOM', () => {
+        const seen = new Set<number>();
+        for (const room of plan.rooms) {
+          expect(room.r1).toBeGreaterThanOrEqual(room.r0);
+          expect(room.c1).toBeGreaterThanOrEqual(room.c0);
+          for (let r = room.r0; r <= room.r1; r++) {
+            for (let c = room.c0; c <= room.c1; c++) {
+              const key = r * HOUSE_COLS + c;
+              expect(seen.has(key), `celda (${r},${c}) en dos cuartos`).toBe(false);
+              seen.add(key);
+              expect(houseCell(plan, r, c)).toBe(CELL_ROOM);
+            }
           }
         }
       });

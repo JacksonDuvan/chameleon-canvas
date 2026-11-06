@@ -8,8 +8,8 @@
  *    estado de juego. Singleton de módulo (client-only: solo lo importan hooks
  *    que se montan dentro de <ClientOnly>).
  *  - `workers-memory-optimization` (espíritu): los eventos son CAMINO FRÍO
- *    (un silbido cada ~14 s por Hider, un chime por captura); el ambiente es un
- *    bucle con nodos estables — sin asignaciones por frame.
+ *    (silbidos con cooldown, un chime por captura); el ambiente es un bucle con
+ *    nodos estables — sin asignaciones por frame.
  *  - NUNCA rompe el juego: sin AudioContext disponible (SSR, bloqueado, sin
  *    gesto del usuario) todos los métodos son no-ops seguros; todo lo que toca
  *    el grafo de audio va con guarda.

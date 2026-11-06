@@ -81,19 +81,17 @@ function handleControlMessage(raw: string): void {
       const roster = parseRoster(msg);
       if (roster) worldStore.setState({ lobbyRoster: roster.players });
     } else if (msg.type === 'whistle') {
-      // V1-H: silbido de un Hider (regla del host). El LOCAL no suena (oírse a
-      // uno mismo posicionado es raro); los remotos suenan en 3D.
+      // V1-H rework (playtest r3): silbido MANUAL de un Hider — el jugador se oye
+      // a SÍ MISMO (confirma que la pista salió) y el Seeker lo oye posicionado.
       const whistle = parseWhistle(msg);
       if (whistle) {
         const st = worldStore.getState();
-        if (whistle.playerId !== st.localPlayerId) {
-          audio.playWhistle(
-            computeSpatial(
-              { x: st.local.pos.x, z: st.local.pos.z, aimX: st.local.aimX, aimZ: st.local.aimZ },
-              { x: whistle.x, z: whistle.z },
-            ),
-          );
-        }
+        audio.playWhistle(
+          computeSpatial(
+            { x: st.local.pos.x, z: st.local.pos.z, aimX: st.local.aimX, aimZ: st.local.aimZ },
+            { x: whistle.x, z: whistle.z },
+          ),
+        );
       }
     } else if (msg.type === 'host') {
       // El servidor reasignó el host (el host anterior se desconectó).
@@ -240,6 +238,7 @@ function applySnapshot(snap: DecodedSnapshot, pending: PendingInput[]): void {
 
 export function useGameSockets(session: Session): GameSockets {
   const { roomId, name } = session;
+  // (V1-H rework: el silbido ya no es regla del host — el Hider lo dispara con T.)
   const wsRef = useRef<WebSocket | null>(null);
   const pendingRef = useRef<PendingInput[]>([]);
   const seqRef = useRef(0);
@@ -253,10 +252,8 @@ export function useGameSockets(session: Session): GameSockets {
 
     const connect = (): void => {
       if (disposed) return;
-      // V1-H: la regla de silbidos la fija el HOST (solo crea config en sala FRESH).
-      const whistleParam = session.whistling ? '&whistling=1' : '';
       const ws = new WebSocket(
-        `${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}${whistleParam}`,
+        `${WS_URL}/api/rooms/${roomId}/ws?name=${encodeURIComponent(name)}`,
       );
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -306,7 +303,7 @@ export function useGameSockets(session: Session): GameSockets {
       // V1-E: al salir de la sala, el estado de la sala no se filtra a la siguiente.
       resetForNewRoom();
     };
-  }, [roomId, name, session.whistling]);
+  }, [roomId, name]);
 
   const sendInput = useCallback((intent: InputIntent) => {
     const ws = wsRef.current;

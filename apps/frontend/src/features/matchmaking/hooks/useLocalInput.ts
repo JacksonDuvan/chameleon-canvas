@@ -9,6 +9,9 @@
  *  - DISPARO (modelo del original): click (con el ratón capturado) o 'F' = 1 disparo
  *    por pulsación (flanco, no mantenido). La munición y el impacto los resuelve el
  *    servidor. No hay congelado voluntario: en Hunt el servidor congela a los Hiders.
+ *  - SILBIDO (V1-H rework): 'T' = el Hider silba MANUALMENTE y da al Seeker una
+ *    pista posicional (útil en el mapa grande). Gating local por UX (rol/fase +
+ *    cooldown de 2 s); la validación autoritativa es del servidor.
  *
  * Skill `r3f-rendering`: teclas y pose viven en closures/refs (NO estado de React);
  * cero re-render por tick. El envío + predicción ocurren en `sendInput`.
@@ -23,17 +26,34 @@ import { audio } from '@/features/canvas-3d/audio/engine';
 import type { GameSockets } from './useGameSockets';
 
 const TICK_MS = 1000 / 30;
+const WHISTLE_COOLDOWN_MS = 2000; // espejo UX del cooldown autoritativo del servidor
 
 export function useLocalInput(sockets: GameSockets): void {
   useEffect(() => {
     const keys = new Set<string>();
     let pose = 0; // pose deseada (cicla con 'R'); el servidor la sanea/valida
     let pendingKeyShots = 0; // disparos encolados con 'F' (flanco de tecla)
+    let nextWhistleAt = 0; // cooldown local del silbido (UX; el servidor limita igual)
 
     const down = (e: KeyboardEvent): void => {
       const k = e.key.toLowerCase();
       if (k === 'r' && !e.repeat) pose = (pose + 1) % POSE_COUNT; // cicla las 6 poses
       if (k === 'f' && !e.repeat) pendingKeyShots++;
+      // V1-H rework: silbido manual del Hider — gating local por UX; el servidor
+      // valida autoritativamente (rol, fase hunt, cooldown).
+      if (k === 't' && !e.repeat) {
+        const st = worldStore.getState();
+        const now = performance.now();
+        if (
+          st.local.role === 'hider' &&
+          !st.local.caught &&
+          st.phase === 'hunt' &&
+          now >= nextWhistleAt
+        ) {
+          nextWhistleAt = now + WHISTLE_COOLDOWN_MS;
+          sockets.sendControl({ type: 'whistle' });
+        }
+      }
       keys.add(k);
     };
     const up = (e: KeyboardEvent): void => void keys.delete(e.key.toLowerCase());

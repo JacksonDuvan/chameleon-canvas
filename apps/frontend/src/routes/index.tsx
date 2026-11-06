@@ -81,9 +81,9 @@ function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
       <Canvas shadows camera={{ position: [0, 12, 16], fov: 60 }}>
         {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.
-            El fondo hace de fallback si el cielo aún no se pintó. */}
+            Casa 80×64: la niebla abre el rango para que los pasillos largos respiren. */}
         <color attach="background" args={['#cfdce8']} />
-        <fog attach="fog" args={['#cfdce8', 40, 130]} />
+        <fog attach="fog" args={['#cfdce8', 60, 170]} />
         <Scene />
         <Controles sockets={sockets} />
       </Canvas>

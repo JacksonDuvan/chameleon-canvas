@@ -1,6 +1,6 @@
 /**
  * Parseo del mensaje de control `whistle` (V1-H): el DO difunde {type:'whistle',
- * playerId, x, y, z} cuando un Hider vivo silba en HUNT (regla del host).
+ * playerId, x, y, z} cuando un Hider vivo silba MANUALMENTE en HUNT (tecla T).
  * Defensivo: la red nunca se confía ⇒ null en lugar de lanzar.
  */
 export interface WhistleEvent {

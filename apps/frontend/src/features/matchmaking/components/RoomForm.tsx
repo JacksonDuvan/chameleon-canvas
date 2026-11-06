@@ -35,16 +35,15 @@ function joinRefusalText(status: { phase: string; players: number; maxPlayers: n
 export function RoomForm({ onEnter }: { onEnter: (session: Session) => void }) {
   const [name, setName] = useState(() => readLastName(window.localStorage));
   const [code, setCode] = useState('');
-  const [whistling, setWhistling] = useState(false); // V1-H: regla del host
   const [busy, setBusy] = useState<'create' | 'join' | 'list' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
 
   const trimmedName = (): string => name.trim().slice(0, 24);
 
-  const enter = (roomId: string, playerName: string, hostRule?: boolean): void => {
+  const enter = (roomId: string, playerName: string): void => {
     saveLastName(window.localStorage, playerName);
-    onEnter({ roomId, name: playerName, ...(hostRule ? { whistling: true } : {}) });
+    onEnter({ roomId, name: playerName });
   };
 
   const handleCreate = async (): Promise<void> => {
@@ -61,7 +60,7 @@ export function RoomForm({ onEnter }: { onEnter: (session: Session) => void }) {
       setError(ERROR_TEXT[res.error.kind]);
       return;
     }
-    enter(res.value.roomId, hostName, whistling);
+    enter(res.value.roomId, hostName);
   };
 
   const handleJoin = async (): Promise<void> => {
@@ -130,15 +129,6 @@ export function RoomForm({ onEnter }: { onEnter: (session: Session) => void }) {
         <button type="button" className="hud-btn lobby-btn" disabled={busy !== null} onClick={handleCreate}>
           {busy === 'create' ? 'creando…' : '▶ Crear sala'}
         </button>
-
-        <label className="lobby-rule" title="Regla opcional del host: en caza, cada Hider vivo emite silbidos que delatan su dirección.">
-          <input
-            type="checkbox"
-            checked={whistling}
-            onChange={(e) => setWhistling(e.target.checked)}
-          />
-          Silbidos: los Hiders emiten pistas sonoras en la caza
-        </label>
 
         <div className="lobby-divider">
           <span>o únete con un código</span>

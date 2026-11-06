@@ -352,62 +352,109 @@ describe('GameRoomDO (integración, workerd)', () => {
     ws.close();
   });
 
-  // ── V1-H: silbidos (regla opcional del host; pista sonora en HUNT) ──
+  // ── V1-H rework (playtest r3): silbido MANUAL del Hider — el mismo jugador lo
+  //    dispara (tecla T) para dar pistas al Seeker en el mapa grande. ──
 
-  it('con la regla ACTIVA, un Hider vivo silba en HUNT (posición incluida)', async () => {
-    // El host crea la sala con ?whistling=1&whistleEverySec=1 (cadencia corta para
-    // el test); luego envenenamos la fase a hunt como si la ronda hubiera arrancado.
-    const stub = stubFor('r-whistle-on');
-    const res = await stub.fetch(
-      'https://do/api/rooms/r-whistle-on/ws?name=Ana&whistling=1&whistleEverySec=1',
-      { headers: { Upgrade: 'websocket' } },
-    );
-    expect(res.status).toBe(101);
-    const ws = res.webSocket!;
-    const col = new JsonCollector(ws);
-    ws.accept();
-    await col.until((m) => (m as { type?: string }).type === 'welcome');
+  it('un Hider silba MANUALMENTE en hunt: llega a TODOS (se oye a sí mismo)', async () => {
+    const stub = stubFor('r-wh-manual');
+    const a = await connect(stub, 'r-wh-manual', 'Ana');
+    const b = await connect(stub, 'r-wh-manual', 'Bob');
+    const wsA = a.webSocket!;
+    const wsB = b.webSocket!;
+    const colA = new JsonCollector(wsA);
+    const colB = new JsonCollector(wsB);
+    wsA.accept();
+    wsB.accept();
+    const anaId = ((await colA.until((m) => (m as { type?: string }).type === 'welcome')) as { playerId: string }).playerId;
+    await colB.until((m) => (m as { type?: string }).type === 'welcome');
 
+    // Roles default = hiders (spawnPlayer); envenena la fase como si la ronda existiera.
     await runInDurableObject(stub, async (instance) => {
       const room = (
-        instance as unknown as { live: { current(): { config: { whistling: boolean; whistleEverySec: number }; world: { phase: string } } | null } }
+        instance as unknown as { live: { current(): { world: { phase: string } } | null } }
       ).live.current();
-      expect(room).not.toBeNull();
-      expect(room!.config.whistling).toBe(true); // la regla del host quedó en la config
-      expect(room!.config.whistleEverySec).toBe(1);
       room!.world.phase = 'hunt';
     });
 
-    const whistle = (await col.until((m) => (m as { type?: string }).type === 'whistle', 6000)) as {
-      playerId: string;
-      x: number;
-      y: number;
-      z: number;
+    wsA.send(JSON.stringify({ type: 'whistle' })); // ¡Ana silba!
+
+    const wA = (await colA.until((m) => (m as { type?: string }).type === 'whistle', 5000)) as {
+      playerId: string; x: number; y: number; z: number;
     };
-    expect(typeof whistle.playerId).toBe('string');
-    expect(Number.isFinite(whistle.x)).toBe(true);
-    expect(Number.isFinite(whistle.z)).toBe(true);
-    ws.close();
+    expect(wA.playerId).toBe(anaId);
+    expect(Number.isFinite(wA.x)).toBe(true);
+    expect(Number.isFinite(wA.y)).toBe(true);
+    expect(Number.isFinite(wA.z)).toBe(true);
+    // El RESTO también lo oye: la pista es para el Seeker (y el propio silbador
+    // se oye a sí mismo como confirmación).
+    const wB = (await colB.until((m) => (m as { type?: string }).type === 'whistle', 5000)) as {
+      playerId: string;
+    };
+    expect(wB.playerId).toBe(anaId);
+    wsA.close();
+    wsB.close();
   });
 
-  it('sin la regla (default) NADIE silba', async () => {
-    const stub = stubFor('r-whistle-off');
-    const res = await connect(stub, 'r-whistle-off', 'Ana'); // sin query params ⇒ default off
-    const ws = res.webSocket!;
-    const col = new JsonCollector(ws);
-    ws.accept();
+  it('el SEEKER no puede silbar (solo los Hiders dan pistas)', async () => {
+    const stub = stubFor('r-wh-seeker');
+    const a = await connect(stub, 'r-wh-seeker', 'Ana');
+    const wsA = a.webSocket!;
+    const colA = new JsonCollector(wsA);
+    wsA.accept();
+    await colA.until((m) => (m as { type?: string }).type === 'welcome');
+
     await runInDurableObject(stub, async (instance) => {
       const room = (
-        instance as unknown as { live: { current(): { config: { whistling: boolean }; world: { phase: string } } | null } }
+        instance as unknown as { live: { current(): { world: { phase: string; players: Map<string, { role: string }> } } | null } }
       ).live.current();
-      expect(room!.config.whistling).toBe(false);
+      const p = room!.world.players.values().next().value!;
+      p.role = 'seeker'; // Ana es la Seeker
       room!.world.phase = 'hunt';
     });
-    // 2.5 s de gracia: no debe llegar NI UN silbido (cadencia del default = 14 s,
-    // pero el scheduler con regla off ni siquiera programa).
-    await new Promise((r) => setTimeout(r, 2500));
-    const whistles = col.seenCount((m) => (m as { type?: string }).type === 'whistle');
-    expect(whistles).toBe(0);
-    ws.close();
+
+    wsA.send(JSON.stringify({ type: 'whistle' }));
+    await new Promise((r) => setTimeout(r, 1200));
+    expect(colA.seenCount((m) => (m as { type?: string }).type === 'whistle')).toBe(0);
+    wsA.close();
+  });
+
+  it('cooldown: silbar en ráfaga solo emite UN silbido (anti-spam)', async () => {
+    const stub = stubFor('r-wh-spam');
+    const a = await connect(stub, 'r-wh-spam', 'Ana');
+    const b = await connect(stub, 'r-wh-spam', 'Bob');
+    const wsA = a.webSocket!;
+    const wsB = b.webSocket!;
+    const colA = new JsonCollector(wsA);
+    const colB = new JsonCollector(wsB);
+    wsA.accept();
+    wsB.accept();
+    await colA.until((m) => (m as { type?: string }).type === 'welcome');
+    await runInDurableObject(stub, async (instance) => {
+      const room = (
+        instance as unknown as { live: { current(): { world: { phase: string } } | null } }
+      ).live.current();
+      room!.world.phase = 'hunt';
+    });
+
+    for (let i = 0; i < 5; i++) wsA.send(JSON.stringify({ type: 'whistle' }));
+    await new Promise((r) => setTimeout(r, 1500));
+    // Bob (observador) recibe EXACTAMENTE 1 silbido pese al ráfaga.
+    expect(colB.seenCount((m) => (m as { type?: string }).type === 'whistle')).toBe(1);
+    wsA.close();
+    wsB.close();
+  });
+
+  it('fuera de HUNT no se silba (en lobby/prep no hay pistas que dar)', async () => {
+    const stub = stubFor('r-wh-lobby');
+    const a = await connect(stub, 'r-wh-lobby', 'Ana');
+    const wsA = a.webSocket!;
+    const colA = new JsonCollector(wsA);
+    wsA.accept();
+    await colA.until((m) => (m as { type?: string }).type === 'welcome');
+
+    wsA.send(JSON.stringify({ type: 'whistle' }));
+    await new Promise((r) => setTimeout(r, 1200));
+    expect(colA.seenCount((m) => (m as { type?: string }).type === 'whistle')).toBe(0);
+    wsA.close();
   });
 });
