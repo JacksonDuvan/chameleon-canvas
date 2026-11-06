@@ -1,10 +1,15 @@
 /**
- * Ruta '/' — pantalla de juego. Compone features; NO contiene lógica de juego
- * (skill `hexagonal-vertical-slicing`). El <Canvas> (WebGL) y el WebSocket son
+ * Ruta '/' — compone las features; NO contiene lógica de juego (skill
+ * `hexagonal-vertical-slicing`). El <Canvas> (WebGL) y el WebSocket son
  * client-only: se montan vía <ClientOnly> (fallback en SSR) para no romper la
  * hidratación de TanStack Start.
+ *
+ * V1-E — flujo de matchmaking: sin sesión → RoomForm (nombre + crear/unirse por
+ * código); con sesión → Game. La sesión vive en sessionStorage (cada pestaña es
+ * un jugador: dos tabs = dos jugadores para probar).
  */
 import { ClientOnly, createFileRoute } from '@tanstack/react-router';
+import { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from '@/features/canvas-3d/components/Scene';
 import { useRaycastColor } from '@/features/canvas-3d/hooks/useRaycastColor';
@@ -14,6 +19,13 @@ import {
   type GameSockets,
 } from '@/features/matchmaking/hooks/useGameSockets';
 import { useLocalInput } from '@/features/matchmaking/hooks/useLocalInput';
+import {
+  clearSession,
+  readSession,
+  saveSession,
+  type Session,
+} from '@/features/matchmaking/hooks/session';
+import { RoomForm } from '@/features/matchmaking/components/RoomForm';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { Hud } from '@/shared/components/Hud';
 
@@ -29,14 +41,38 @@ function Home() {
         </main>
       }
     >
-      <Game />
+      <LobbyFlow />
     </ClientOnly>
   );
 }
 
-function Game() {
-  // TODO(matchmaking): roomId y nombre vendrán de RoomForm; fijos para el MVP.
-  const sockets = useGameSockets('demo', 'Player');
+/** V1-E: RoomForm ⇄ Game según la sesión (el storage manda al recargar). */
+function LobbyFlow() {
+  const [session, setSession] = useState<Session | null>(() => readSession(sessionStorage));
+
+  if (!session) {
+    return (
+      <RoomForm
+        onEnter={(s) => {
+          saveSession(sessionStorage, s);
+          setSession(s);
+        }}
+      />
+    );
+  }
+  return (
+    <Game
+      session={session}
+      onLeave={() => {
+        clearSession(sessionStorage);
+        setSession(null);
+      }}
+    />
+  );
+}
+
+function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
+  const sockets = useGameSockets(session.roomId, session.name);
   useLocalInput(sockets);
 
   return (
@@ -52,6 +88,7 @@ function Game() {
       <Hud
         onStart={() => sockets.sendControl({ type: 'start' })}
         onRestart={() => sockets.sendControl({ type: 'restart' })}
+        onLeave={onLeave}
       />
     </main>
   );

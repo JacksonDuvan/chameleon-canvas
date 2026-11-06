@@ -43,3 +43,28 @@ export const PlayerRole = {
   SEEKER: 'seeker',
 } as const;
 export type PlayerRole = (typeof PlayerRole)[keyof typeof PlayerRole];
+
+// ── V1-E: mensajes de control de matchmaking (JSON raro, no por tick) ──
+
+/** Jugador del roster difundido (los nombres viven server-side, no en el wire binario). */
+export interface RosterPlayer {
+  readonly id: string;
+  readonly name: string;
+  readonly isHost: boolean;
+}
+
+/** Mensaje Servidor → Cliente con la lista de jugadores de la sala (lobby). */
+export interface RosterMsg {
+  readonly type: 'roster';
+  readonly hostId: string | null;
+  readonly players: readonly RosterPlayer[];
+}
+
+/** Respuesta del pre-flight GET /api/rooms/:roomId/status (antes de abrir el WS). */
+export interface RoomStatus {
+  readonly roomId: string;
+  readonly phase: string; // GamePhase como string (el DO la reporta; no se crea sala)
+  readonly players: number;
+  readonly maxPlayers: number;
+  readonly joinable: boolean;
+}

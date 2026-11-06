@@ -61,7 +61,7 @@ Sólido y verificado con tests:
 | Monetización: puertos + mocks (ads, tienda R2, Premium) | 🟡 parcial | puerto+entitlement listos; falta **todo el frontend** y SDKs |
 | Hono RPC `AppType` end-to-end | 🟡 parcial | tiempo real va por WS; RPC HTTP de control sin cablear al cliente |
 | Pipeline `.glb` (Draco/Meshopt/gltfjsx), modelo de camaleón | ❌ | hoy son cápsulas primitivas |
-| Matchmaking UI (RoomForm, PlayerList, unirse por código) | ❌ | sala fija `demo`, nombre fijo `Player` |
+| Matchmaking UI (RoomForm, PlayerList, unirse por código) | ✅ (P2.1, `docs/17`) | placas de nombre 3D (P2.3) |
 | Predicción / reconciliación / interpolación | ✅ | — |
 | Lag compensation en la captura | ❌ | diseñado en la skill; no implementado |
 
@@ -143,12 +143,14 @@ Sólido y verificado con tests:
 
 ## P2 · Experiencia multijugador completa
 
-### P2.1 · Matchmaking / salas — **L**
+### P2.1 · Matchmaking / salas — **L** — ✅ HECHO (V1-E, ver `docs/17`)
 - **Objetivo:** crear/unirse a salas por código, no `demo` fija.
 - **Alcance:** `features/matchmaking/components/RoomForm.tsx` + `PlayerList.tsx`;
-  pantalla previa de nombre+sala; **Hono RPC `AppType`** para crear/listar salas
-  (cerrar la deuda de `endpoints.ts`); lista de jugadores en lobby leyendo el roster.
-- **Hecho cuando:** dos navegadores entran a la misma sala por código y se ven en el lobby.
+  pantalla previa de nombre+sala; Hono RPC para crear/listar salas (la deuda de
+  `endpoints.ts` se cerró con desviación documentada: cliente tipado validado con
+  los esquemas Zod de `@shared` en vez de `hc<AppType>` — ver `docs/17` §5);
+  lista de jugadores en lobby leyendo el roster; pre-flight read-only de join.
+- **Hecho cuando:** dos navegadores entran a la misma sala por código y se ven en el lobby. ✅ (E2E)
 - **Skills:** `hexagonal-vertical-slicing`, `authoritative-netcode`.
 
 ### P2.2 · Audio + Whistling — **M**
@@ -232,6 +234,6 @@ Sólido y verificado con tests:
 > **P0 núcleo jugable: ✅ COMPLETO** ([`docs/08`](08-step-6-camouflage-core.md)) ·
 > **Núcleo de esconderse de V1 (V1-A/B/C): ✅ COMPLETO** ([`docs/10`](10-step-7-hiding-core.md))
 > — oclusión+colisión del escenario, poses con hitbox propio y Seeker FPP con mouse-look.
-> **Siguiente** (ver [`docs/09`](09-v1-scope.md)): probar/re-balancear jugando (V1-D),
-> **V1-F results/reveal**, **V1-E matchmaking por código**, pass visual (V1-G), audio
-> (V1-H) y deploy al edge (V1-I).
+> **V1-E matchmaking por código: ✅ COMPLETO** ([`docs/17`](17-step-14-matchmaking.md)).
+> **Siguiente** (ver [`docs/09`](09-v1-scope.md)): playtest del usuario (V1-D),
+> **V1-H audio mínimo** y **V1-I deploy al edge**.

@@ -10,7 +10,8 @@
 import { Hono } from 'hono';
 import type { Env } from '@/shared/env';
 
-export const gameplayRoutes = new Hono<{ Bindings: Env }>()
-  .get('/health', (c) => c.json({ ok: true, tickHz: c.env.TICK_HZ }))
-  // TODO(Paso 3): crear sala, listar salas, etc. (zValidator con esquemas de @shared).
-  .post('/rooms', (c) => c.json({ roomId: 'TODO', phase: 'lobby' as const }, 201));
+export const gameplayRoutes = new Hono<{ Bindings: Env }>().get(
+  '/health',
+  (c) => c.json({ ok: true, tickHz: c.env.TICK_HZ }),
+);
+// Crear/listar salas vive en el slice `matchmaking` (V1-E): /api/matchmaking/rooms.

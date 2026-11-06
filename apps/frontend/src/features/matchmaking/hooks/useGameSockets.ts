@@ -23,6 +23,8 @@ import {
 } from '@mecha/shared';
 import { DEFAULT_SIM_CONFIG, Vec3, generateMap } from '@mecha/sim';
 import { buildRevealList, type RevealSubject } from '@/features/canvas-3d/hooks/reveal';
+import { parseRoster } from './roster';
+import { resetForNewRoom } from '@/features/canvas-3d/store/worldStore';
 
 const DT = 1 / DEFAULT_SIM_CONFIG.tickHz;
 const MAX_PENDING_INPUTS = 120; // ~4 s a 30 Hz: cota ante pérdida de snapshots
@@ -69,6 +71,10 @@ function handleControlMessage(raw: string): void {
       // Por si un snapshot creó al local como remoto antes del welcome (race): bórralo.
       worldStore.getState().remotes.delete(msg.playerId);
       worldStore.setState({ localPlayerId: msg.playerId, isHost: msg.isHost === true });
+    } else if (msg.type === 'roster') {
+      // V1-E: lista de jugadores del lobby (nombres server-only; no van en el wire).
+      const roster = parseRoster(msg);
+      if (roster) worldStore.setState({ lobbyRoster: roster.players });
     } else if (msg.type === 'host') {
       // El servidor reasignó el host (el host anterior se desconectó).
       worldStore.setState({ isHost: msg.isHost === true });
@@ -221,6 +227,8 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
     let disposed = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
+    // V1-E: publica el código de sala (el HUD lo muestra para compartirlo).
+    worldStore.setState({ roomId });
 
     const connect = (): void => {
       if (disposed) return;
@@ -270,6 +278,8 @@ export function useGameSockets(roomId: string, name: string): GameSockets {
         ws.close();
       }
       wsRef.current = null;
+      // V1-E: al salir de la sala, el estado de la sala no se filtra a la siguiente.
+      resetForNewRoom();
     };
   }, [roomId, name]);
 

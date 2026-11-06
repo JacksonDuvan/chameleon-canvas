@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { revealIndexAt } from '@/features/canvas-3d/hooks/reveal';
+import { PlayerList } from '@/features/matchmaking/components/PlayerList';
 import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
 
 const PHASE_LABEL: Record<string, string> = {
@@ -186,8 +187,18 @@ function useHitMarker(): boolean {
   return show;
 }
 
-export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: () => void }) {
+export function Hud({
+  onStart,
+  onRestart,
+  onLeave,
+}: {
+  onStart: () => void;
+  onRestart: () => void;
+  /** V1-E: salir de la sala (vuelve al RoomForm y limpia la sesión). */
+  onLeave: () => void;
+}) {
   const phase = useStore(worldStore, (s) => s.phase);
+  const roomId = useStore(worldStore, (s) => s.roomId);
   const outcome = useStore(worldStore, (s) => s.outcome);
   const connected = useStore(worldStore, (s) => s.connected);
   const isHost = useStore(worldStore, (s) => s.isHost);
@@ -322,9 +333,15 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
         </div>
       )}
 
-      {/* Botón Empezar (solo el host, en Lobby) */}
+      {/* Lobby (V1-E): código compartible + jugadores + Empezar/Salir */}
       {phase === 'lobby' && (
         <div className="hud-lobby">
+          <div className="hud-roomcode" role="status">
+            <span className="hud-roomcode-label">Código de sala</span>
+            <span className="hud-roomcode-value">{roomId ?? '…'}</span>
+            <span className="hud-roomcode-hint">compártelo para que se unan</span>
+          </div>
+          <PlayerList />
           {isHost ? (
             <button type="button" onClick={onStart} className="hud-btn">
               ▶ Empezar partida
@@ -332,6 +349,9 @@ export function Hud({ onStart, onRestart }: { onStart: () => void; onRestart: ()
           ) : (
             <span className="hud-chip hud-chip--muted">esperando a que el host inicie la partida…</span>
           )}
+          <button type="button" onClick={onLeave} className="hud-btn hud-btn--leave">
+            ← Salir de la sala
+          </button>
         </div>
       )}
 

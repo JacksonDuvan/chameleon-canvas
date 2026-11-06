@@ -16,6 +16,8 @@ export interface Env {
   GAME_ROOM: DurableObjectNamespace;
   /** Entitlements / suscripción "Premium Club" (slice monetization). */
   MONET_KV: KVNamespace;
+  /** Registro de salas activas: listado + des-duplicación de códigos (V1-E). */
+  ROOMS_KV: KVNamespace;
   /** Texturas/cosméticos premium custom. */
   COSMETICS_R2: R2Bucket;
   TICK_HZ: string;

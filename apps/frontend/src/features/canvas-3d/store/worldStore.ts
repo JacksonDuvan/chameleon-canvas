@@ -13,7 +13,7 @@
  */
 import { createStore } from 'zustand/vanilla';
 import { Vec3, PlayerState, DEFAULT_MAP, type GameOutcome, type MapData } from '@mecha/sim';
-import type { GamePhase, PlayerRole } from '@mecha/shared';
+import type { GamePhase, PlayerRole, RosterPlayer } from '@mecha/shared';
 import type { RevealEntry } from '../hooks/reveal';
 
 /** Snapshot de un remoto para interpolar en el pasado. */
@@ -56,6 +56,10 @@ export interface WorldStoreState {
   serverTick: number;
 
   // ── LENTO (presentación; seguro con selector reactivo) ──
+  /** Código de la sala en la que estás (V1-E: se muestra para compartirlo). */
+  roomId: string | null;
+  /** Roster del lobby (id + nombre + host). Lo difunde el DO en cambios de roster. */
+  lobbyRoster: RosterPlayer[];
   phase: GamePhase;
   /** Semilla del mapa de la ronda (mapa ALEATORIO). Cambia una vez por ronda. */
   mapSeed: number;
@@ -84,6 +88,8 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   remotes: new Map(),
   localPlayerId: null,
   serverTick: 0,
+  roomId: null,
+  lobbyRoster: [],
   phase: 'lobby',
   mapSeed: 1,
   map: DEFAULT_MAP,
@@ -98,3 +104,28 @@ export const worldStore = createStore<WorldStoreState>(() => ({
   endedAt: null,
   catchSpots: new Map(),
 }));
+
+/**
+ * V1-E — resetea el estado de "estar en una sala" al SALIR (o al entrar a una
+ * sala nueva): sin esto, remotos/roster/reveal de la sala anterior se filtrarían
+ * a la siguiente. El estado rápido se limpia IN SITU (los Map son readonly de
+ * referencia, mutables de contenido — patrón del store). Idempotente.
+ */
+export function resetForNewRoom(): void {
+  const st = worldStore.getState();
+  st.remotes.clear();
+  st.catchSpots.clear();
+  worldStore.setState({
+    roomId: null,
+    localPlayerId: null,
+    isHost: false,
+    localRole: 'hider',
+    phase: 'lobby',
+    outcome: 'none',
+    lastError: null,
+    hitPulse: 0,
+    revealList: null,
+    endedAt: null,
+    lobbyRoster: [],
+  });
+}

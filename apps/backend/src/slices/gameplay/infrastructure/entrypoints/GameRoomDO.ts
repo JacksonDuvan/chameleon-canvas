@@ -16,7 +16,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '@/shared/env';
-import { Room } from '@/slices/gameplay/domain/entities/Room';
+import { Room, DEFAULT_ROOM_CONFIG } from '@/slices/gameplay/domain/entities/Room';
 import { DoStorageRoomRepository } from '@/slices/gameplay/infrastructure/adapters/DoStorageRoomRepository';
 import { SingleRoomRepository } from '@/slices/gameplay/infrastructure/adapters/SingleRoomRepository';
 import { PlayerJoin } from '@/slices/gameplay/use-cases/PlayerJoin';
@@ -107,17 +107,23 @@ export class GameRoomDO extends DurableObject<Env> {
   }
 
   override async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
     if (req.headers.get('Upgrade') !== 'websocket') {
+      // V1-E: pre-flight del RoomForm ANTES de abrir el WS (si la ronda ya empezó,
+      // el 409 del join sería un reintento infinito para el cliente).
+      if (url.pathname.endsWith('/status')) return this.roomStatus(url);
       return new Response('Expected WebSocket upgrade', { status: 426 });
     }
-    const url = new URL(req.url);
     const parts = url.pathname.split('/');
     const roomId = parts[parts.indexOf('rooms') + 1] ?? url.searchParams.get('room') ?? '';
     if (!roomId) return new Response('Missing room id', { status: 400 });
 
     await this.ensureRoom(roomId);
 
-    const name = url.searchParams.get('name') ?? 'Player';
+    // Traducción de protocolo (adaptador): sanea lo que llega por query param.
+    // Misma regla que createRoomSchema del lado HTTP (trim, 1..24, no vacío).
+    const rawName = url.searchParams.get('name') ?? '';
+    const name = rawName.trim().slice(0, 24) || 'Player';
     const playerId = this.newPlayerId();
     const join = await this.playerJoin.execute({ roomId, playerId, displayName: name });
     if (!join.ok) {
@@ -136,6 +142,7 @@ export class GameRoomDO extends DurableObject<Env> {
 
     this.forceKeyframe = true; // el nuevo jugador necesita estado completo
     this.ensureLoop();
+    this.broadcastRoster(join.value); // V1-E: nombres del lobby para todos
     return new Response(null, { status: 101, webSocket: pair[0]! });
   }
 
@@ -167,6 +174,44 @@ export class GameRoomDO extends DurableObject<Env> {
   }
 
   // ── Internos ──
+
+  /**
+   * V1-E — estado de la sala para el pre-flight del join (READ-ONLY: NO crea la
+   * sala ni toca el storage de creación). Semántica de `joinable`:
+   *  - sala en lobby con cupo → true;
+   *  - sala con 0 jugadores → true (renace a lobby al unirse; ver `reconcileRoster`);
+   *  - ronda en curso con jugadores → false (el WS daría 409 AlreadyStarted).
+   */
+  private async roomStatus(url: URL): Promise<Response> {
+    const parts = url.pathname.split('/');
+    const roomId = parts[parts.indexOf('rooms') + 1] ?? url.searchParams.get('room') ?? '';
+    if (!roomId) return new Response('Missing room id', { status: 400 });
+
+    const live = this.live.current();
+    if (live && live.id === roomId) {
+      this.reconcileRoster(); // poda fantasmas antes de reportar (no persiste)
+      return this.statusJson(roomId, live.world.phase, live.world.players.size, live.config.maxPlayers);
+    }
+    // Sala no viva: o nunca existió (nueva ⇒ lobby vacío joinable), o está
+    // persistida (hibernada). Cargar del storage SIN crear nada.
+    const stored = await this.ctx.storage.get<string>('roomId');
+    if (stored !== roomId) {
+      return this.statusJson(roomId, 'lobby', 0, DEFAULT_ROOM_CONFIG.maxPlayers);
+    }
+    const loaded = await this.persist.load(roomId);
+    const room = loaded.ok ? loaded.value : null;
+    if (!room) return this.statusJson(roomId, 'lobby', 0, DEFAULT_ROOM_CONFIG.maxPlayers);
+    const players = room.world.players.size;
+    return this.statusJson(roomId, room.world.phase, players, room.config.maxPlayers);
+  }
+
+  private statusJson(roomId: string, phase: string, players: number, maxPlayers: number): Response {
+    const joinable = players < maxPlayers && (phase === 'lobby' || players === 0);
+    return new Response(
+      JSON.stringify({ roomId, phase, players, maxPlayers, joinable }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }
 
   private async ensureRoom(roomId: string): Promise<void> {
     // Ya cargada en memoria (p. ej. rehidratada por el constructor tras un wake): aun
@@ -237,6 +282,7 @@ export class GameRoomDO extends DurableObject<Env> {
         if (room.hostId) this.notifyHost(room.hostId);
       }
       this.forceKeyframe = true; // cambió el roster → el delta ya no es válido
+      this.broadcastRoster(room); // V1-E: el resto ve la lista actualizada
     }
     try {
       ws.close();
@@ -302,6 +348,30 @@ export class GameRoomDO extends DurableObject<Env> {
   }
 
   /**
+   * V1-E — difunde la lista de jugadores (id + nombre + host) a TODOS los sockets.
+   * Camino FRÍO (una vez por join/leave/reconcile con cambio; nunca por tick):
+   * el JSON de control está permitido aquí por `authoritative-netcode` (mensajes
+   * raros de control ≠ snapshots). Los nombres viven en `roster` (server-only);
+   * el keyframe binario no los lleva ⇒ el lobby necesita este evento.
+   */
+  private broadcastRoster(room: Room): void {
+    const sockets = this.ctx.getWebSockets();
+    if (sockets.length === 0) return;
+    const players: { id: string; name: string; isHost: boolean }[] = [];
+    for (const [id, player] of room.roster) {
+      players.push({ id, name: player.displayName, isHost: id === room.hostId });
+    }
+    const msg = JSON.stringify({ type: 'roster', hostId: room.hostId, players });
+    for (let i = 0; i < sockets.length; i++) {
+      try {
+        sockets[i]!.send(msg);
+      } catch {
+        /* socket cerrándose: lo limpiará webSocketClose */
+      }
+    }
+  }
+
+  /**
    * Arranca el bucle de 30 Hz mientras la partida está viva (impide hibernar a
    * propósito). Idempotente. Suposición de runtime MONOHILO: `setInterval` y los
    * handlers de WebSocket se ejecutan secuencialmente sin reentrada; no añadir
@@ -342,7 +412,10 @@ export class GameRoomDO extends DurableObject<Env> {
     //    cierres abruptos que no dispararon webSocketClose.
     if (++this.ticksSinceReconcile >= KEYFRAME_EVERY) {
       this.ticksSinceReconcile = 0;
-      if (this.reconcileRoster()) this.forceKeyframe = true;
+      if (this.reconcileRoster()) {
+        this.forceKeyframe = true;
+        this.broadcastRoster(room); // V1-E: fantasmas fuera del roster difundido
+      }
     }
 
     // 1) Simulación determinista (sin I/O, sin asignar). RNG enhebrado vía world.rngState.

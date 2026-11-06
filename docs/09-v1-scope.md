@@ -61,7 +61,7 @@ Orden sugerido de ejecución entre paréntesis. `✅`=hecho · `🟡`=parcial ·
 | **V1-B** | **Poses + rotación** (P1.1): de pie/agachado/bola/plano-pared; rota para encajar | ✅ ([`docs/10`](10-step-7-hiding-core.md)) | Romper silueta = esconderse de verdad. |
 | **V1-C** | **Seeker FPP + mouse-look**: 1ª persona, apuntar con el ratón, retícula | ✅ ([`docs/10`](10-step-7-hiding-core.md)) | La caza necesita mirar/escanear/apuntar. |
 | **V1-D** | Camuflaje (barra) + caza por **disparos del original** (ilimitados por defecto; modo limitado 2.3.0 como opción; sustituyó a la fijación tras el playtest, ver [`docs/10`](10-step-7-hiding-core.md) §7.5) | ✅ | Hecho; seguir balanceando jugando (cooldown/alcance). |
-| **V1-E** | **Matchmaking**: crear/unirse por código + nombre (P2.1, cierra Hono RPC) | ❌ (3) | Para jugar con gente / lanzar al público. |
+| **V1-E** | **Matchmaking**: crear/unirse por código + nombre (P2.1, cierra Hono RPC) | ✅ ([`docs/17`](17-step-14-matchmaking.md)) | Para jugar con gente / lanzar al público. |
 | **V1-F** | **Bucle + resultados/reveal** (P1.3): pantalla de fin que **revela** dónde se escondió cada uno; feedback de roles | ✅ ([`docs/14`](14-step-11-results-reveal.md)) | El *payoff* divertido ("answer-check"). |
 | **V1-G** | **Pass visual estilizado**: cielo, luz, sombras suaves, personaje con silueta decente, HUD con botones/timer (placas de nombre → con V1-E) | ✅ ([`docs/11`](11-step-8-visual-pass.md)) | Que parezca un juego, no una escena de debug. Ver §5. |
 | **V1-H** | **Audio mínimo**: SFX de captura + ambiente (silbido/whistling opcional, P2.2) | ❌ (5) | "Juice" barato que sube mucho la diversión. |
@@ -110,8 +110,9 @@ Post-V1 (siguen en [`docs/06`](06-roadmap.md), no se tocan para lanzar):
 
 ## 7. Definición de "listo para lanzar" (V1 = done)
 
-- [ ] Dos+ navegadores entran **por código** a la misma sala (nombre propio) y juegan una
+- [x] Dos+ navegadores entran **por código** a la misma sala (nombre propio) y juegan una
       **ronda completa** lobby → prep → hunt → **results con reveal**.
+      *(Lobby→prep verificado E2E en V1-E; la ronda completa lo estaba desde el Paso 11.)*
 - [ ] Un Hider **camuflado + posado + quieto entre props NO es detectado** por un Seeker que
       ronda cerca; uno mal escondido/en movimiento **sí** cae. *(La regla innegociable, §1.)*
 - [ ] El **Seeker caza en 1ª persona apuntando con el ratón**.

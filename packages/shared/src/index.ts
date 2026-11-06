@@ -9,4 +9,5 @@
 
 export * from './result';
 export * from './protocol';
-// export * from './rpc/schemas'; // habilitar cuando se definan los esquemas zod (Paso 3)
+export * from './room';
+export * from './rpc/schemas'; // esquemas Zod de Hono RPC (activados en V1-E)
