@@ -35,8 +35,7 @@
 	// ── Monetización (puertos ya previstos en el dominio) ──
 	// KV: entitlements / suscripción "Premium Club" / flags.
 	// ROOMS_KV (V1-E): registro de salas activas (código → metadatos, TTL 1 h).
-	// ⚠ El id de abajo es un placeholder local (dev/miniflare/tests). ANTES del
-	// deploy real (V1-I): `wrangler kv namespace create ROOMS_KV` y sustituirlo.
+	// Id real creado con `wrangler kv namespace create ROOMS_KV` (V1-I, Paso 16).
 	"kv_namespaces": [
 		{
 			"binding": "MONET_KV",
@@ -44,7 +43,7 @@
 		},
 		{
 			"binding": "ROOMS_KV",
-			"id": "7c3a9f41b8e24d60a5f0c9d8e21b74a3"
+			"id": "3ff938bfb0e84197aca638e4c11441c9"
 		}
 	],
 	// R2: texturas/cosméticos premium custom. POSPUESTO (P3 — aún no se usa en runtime).

@@ -192,8 +192,10 @@ Sólido y verificado con tests:
   cápsulas), Draco/Meshopt + `gltfjsx`, LODs. Sustituye el placeholder de `MechaMesh`.
 - **P4.2 · Lag compensation** — **M**: la skill `authoritative-netcode` lo prevé;
   rebobinar para validar capturas con RTT alto.
-- **P4.3 · Despliegue producción** — **M**: `wrangler deploy` backend+frontend, KV/R2
-  reales, dominios, variables; smoke test en el edge.
+- **P4.3 · Despliegue producción** — **M** — ✅ HECHO (V1-I, `docs/19`):
+  `wrangler deploy` backend+frontend en el edge con KV real (ROOMS_KV creado),
+  smoke HTTP + E2E 8/8 de 2 navegadores contra las URLs de producción. Dominio
+  propio y observabilidad quedan como mejora post-V1.
 - **P4.4 · Observabilidad y anti-cheat** — **M**: métricas de sala/tick, validación de
   inputs imposibles, límites de rate.
 - **P4.5 · Accesibilidad / móvil / i18n** — **L**: controles táctiles, escalado de UI,
@@ -237,6 +239,7 @@ Sólido y verificado con tests:
 > **Núcleo de esconderse de V1 (V1-A/B/C): ✅ COMPLETO** ([`docs/10`](10-step-7-hiding-core.md))
 > — oclusión+colisión del escenario, poses con hitbox propio y Seeker FPP con mouse-look.
 > **V1-E matchmaking por código: ✅ COMPLETO** ([`docs/17`](17-step-14-matchmaking.md)) ·
-> **V1-H audio mínimo + silbidos: ✅ COMPLETO** ([`docs/18`](18-step-15-audio.md)).
-> **Siguiente** (ver [`docs/09`](09-v1-scope.md)): playtest del usuario (V1-D) y
-> **V1-I deploy al edge**.
+> **V1-H audio mínimo + silbidos: ✅ COMPLETO** ([`docs/18`](18-step-15-audio.md)) ·
+> **V1-I deploy al edge: ✅ COMPLETO** ([`docs/19`](19-step-16-deploy.md)) — V1
+> desplegada y jugable; solo queda el **playtest de balance (V1-D)** con gente real.
+> **Siguiente** (ver [`docs/09`](09-v1-scope.md)): playtest del usuario (V1-D).
