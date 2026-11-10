@@ -244,7 +244,7 @@ export function Hud({
       {/* Barra superior: identidad · timer/fase · estado */}
       <div className="hud-top">
         <div className="hud-cluster">
-          <span className="hud-chip hud-chip--logo">🦎 Meccha Chameleon</span>
+          {!inRound && <span className="hud-chip hud-chip--logo">🦎 Meccha Chameleon</span>}
           {phase !== 'lobby' && (
             <span
               className={`hud-chip ${localRole === 'seeker' ? 'hud-chip--seeker' : 'hud-chip--hider'}`}
@@ -269,7 +269,7 @@ export function Hud({
           <span className="hud-timer-phase">{PHASE_LABEL[phase] ?? phase}</span>
         </div>
         <div className="hud-cluster hud-cluster--right">
-          <span className="hud-chip hud-chip--muted">
+          <span className="hud-chip hud-chip--muted hud-chip--controls">
             {localRole === 'seeker'
               ? 'WASD mover · ratón mirar · click disparar'
               : 'WASD mover · ratón mirar · E absorber · R pose · T silbar'}

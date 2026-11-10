@@ -12,7 +12,7 @@
  */
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { DEFAULT_SIM_CONFIG } from '@mecha/sim';
+import { DEFAULT_SIM_CONFIG, rayAABB, type MapData } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { lookState } from '../hooks/useMouseLook';
 import { sampleLocalMut } from '../hooks/interpolation';
@@ -34,6 +34,48 @@ const _desired = new THREE.Vector3();
 const _lookDir = new THREE.Vector3();
 const _lp = new THREE.Vector3(); // pos local SUAVIZADA entre ticks (sin temblor)
 
+const CAM_PAD = 0.4; // separación cámara↔muro
+const CAM_MIN_DIST = 0.5; // distancia mínima al objetivo
+const CAM_LIFT_FROM = 3.2; // por debajo de esta distancia la cámara empieza a SUBIR
+const CAM_LIFT_GAIN = 1.25; // m de altura extra por m de distancia perdida
+
+/**
+ * Colisión de la cámara en tercera persona (playtest r5: la cámara quedaba
+ * DETRÁS/DENTRO de los muros en pasillos y cuartos). Rayo objetivo→cámara contra
+ * los AABB de los MUROS del mapa compartido (los props bajos no cuentan: se mira
+ * por encima); si algo lo corta, la cámara se acerca hasta quedar delante Y SUBE:
+ * pegado de espaldas a un muro (lo normal al esconderse) la vista pasa a ser un
+ * picado sobre el avatar en vez de meterse dentro de su cabeza.
+ * Sin asignaciones: ~200 muros × rayAABB por frame.
+ */
+function clampCameraToWalls(map: MapData, target: THREE.Vector3, cam: THREE.Vector3): void {
+  let dx = cam.x - target.x;
+  let dy = cam.y - target.y;
+  let dz = cam.z - target.z;
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist < 1e-4) return;
+  dx /= dist;
+  dy /= dist;
+  dz /= dist;
+  let best = dist;
+  const zones = map.zones;
+  for (let i = 0; i < zones.length; i++) {
+    const zn = zones[i]!;
+    if (zn.kind !== 'wall') continue;
+    const t = rayAABB(
+      target.x, target.y, target.z, dx, dy, dz,
+      zn.minX, zn.y - zn.height / 2, zn.minZ,
+      zn.maxX, zn.y + zn.height / 2, zn.maxZ,
+    );
+    if (t !== null && t < best) best = t;
+  }
+  if (best >= dist) return;
+  const d = Math.max(CAM_MIN_DIST, best - CAM_PAD);
+  if (d >= dist) return;
+  const lift = Math.max(0, CAM_LIFT_FROM - d) * CAM_LIFT_GAIN;
+  cam.set(target.x + dx * d, target.y + dy * d + lift, target.z + dz * d);
+}
+
 export function CameraRig() {
   const camera = useThree((s) => s.camera);
   useFrame((_, delta) => {
@@ -45,12 +87,14 @@ export function CameraRig() {
     const phase = st.phase;
     const isSeeker = st.local.role === 'seeker';
 
-    // FOV por modo (75° FPP / 60° resto). Solo recalcula la proyección al CAMBIAR
-    // (transición de fase/rol, rara vez) — nunca por frame (skill r3f-rendering).
+    // FOV por modo (75° FPP / 60° resto). Solo recalcula la proyección DURANTE la
+    // transición de fase/rol (~0.5 s) — nunca en régimen (skill r3f-rendering).
     const fov = isSeeker && phase === 'hunt' ? FOV_FPP : FOV_TP;
     const persp = camera as THREE.PerspectiveCamera;
     if (persp.isPerspectiveCamera && persp.fov !== fov) {
-      persp.fov = fov;
+      // Transición suave (antes saltaba 60°→75° de golpe al empezar la caza).
+      const next = persp.fov + (fov - persp.fov) * Math.min(1, delta * 7);
+      persp.fov = Math.abs(fov - next) < 0.05 ? fov : next;
       persp.updateProjectionMatrix();
     }
 
@@ -76,6 +120,7 @@ export function CameraRig() {
       _target.set(lp.x, lp.y + 1.2, lp.z);
       _desired.set(lp.x - fx * TP_DIST, lp.y + lift, lp.z - fz * TP_DIST);
       camera.position.lerp(_desired, 1 - Math.pow(0.000001, delta));
+      clampCameraToWalls(st.map, _target, camera.position);
       camera.lookAt(_target);
       return;
     }

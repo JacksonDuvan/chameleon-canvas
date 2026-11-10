@@ -80,11 +80,12 @@ function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
 
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
-      {/* Renderer (spec r4): sombras PCFSoft + ACESFilmic con exposición 1.2
-          para que los colores del camuflaje resalten. */}
+      {/* Renderer: sombras PCFSoft + tone mapping NEUTRAL (Khronos PBR Neutral).
+          ACES desaturaba y viraba los tonos; en un juego de IGUALAR colores el
+          color en pantalla debe parecerse al de la paleta del mapa. */}
       <Canvas
         shadows="soft"
-        gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+        gl={{ toneMapping: THREE.NeutralToneMapping, toneMappingExposure: 1.05 }}
         camera={{ position: [0, 12, 16], fov: 60 }}
       >
         {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.

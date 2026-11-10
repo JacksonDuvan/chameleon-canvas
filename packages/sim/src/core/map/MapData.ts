@@ -26,6 +26,9 @@ export type ZoneKind = 'floor' | 'wall' | 'prop';
  */
 export type ZoneShape = 'box' | 'cylinder' | 'sphere' | 'figure' | 'figureWall';
 
+/** Mueble de oficina (pista de render; ver `MapZone.furniture`). */
+export type FurnitureKind = 'cabinet' | 'desk' | 'terminal' | 'stool';
+
 /** Región rectangular del escenario (AABB en el plano XZ, con altura) + su material. */
 export interface MapZone {
   readonly id: string;
@@ -44,6 +47,9 @@ export interface MapZone {
   readonly shape?: ZoneShape;
   /** Orientación de render en cuartos de vuelta sobre Y (0..3; solo figuras). */
   readonly rot?: 0 | 1 | 2 | 3;
+  /** Tipo de mueble de oficina (SOLO presentación: el cliente dibuja una malla
+   *  detallada DENTRO del mismo AABB; colisión/oclusión/camuflaje no cambian). */
+  readonly furniture?: FurnitureKind;
 }
 
 export interface MapSpawn {
@@ -680,9 +686,9 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
       const kind = officeKinds[office % officeKinds.length]!;
       const spec = OFFICE[kind];
       if (kind === 'stool') {
-        zones.push({ id: `room-${room.id}-stool-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'cylinder' });
+        zones.push({ id: `room-${room.id}-stool-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'cylinder', furniture: kind });
       } else {
-        zones.push({ id: `room-${room.id}-${kind}-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'box' });
+        zones.push({ id: `room-${room.id}-${kind}-${office}`, kind: 'prop', minX: q(fx - spec.w / 2), maxX: q(fx + spec.w / 2), minZ: q(fz - spec.d / 2), maxZ: q(fz + spec.d / 2), y: q(spec.h / 2), height: spec.h, color: rgb(spec.color), roughness: spec.rough, metalness: spec.metal, shape: 'box', furniture: kind });
       }
       office++;
     }

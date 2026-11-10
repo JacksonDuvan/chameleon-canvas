@@ -305,6 +305,19 @@ body,
 .hud-btn:hover {
   filter: brightness(1.06);
 }
+.hud-btn:focus-visible,
+.hud-chip--audio:focus-visible,
+.lobby-list-toggle:focus-visible,
+.lobby-room-chip:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+.hud-btn:disabled {
+  cursor: default;
+  filter: grayscale(0.7) brightness(0.92);
+  opacity: 0.6;
+  transform: none;
+}
 .hud-btn:active {
   transform: translateY(3px);
   box-shadow:
@@ -417,16 +430,6 @@ body,
   border-radius: 7px;
   border: 2px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-/* Zona inferior del lobby */
-.hud-lobby {
-  position: absolute;
-  bottom: 30px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
 }
 
 @keyframes hud-pulse {
@@ -733,4 +736,53 @@ body,
 }
 .hud-chip--audio:hover {
   filter: brightness(1.15);
+}
+
+/* ── Pantallas estrechas: el HUD no debe pisar el timer ── */
+@media (max-width: 1100px) {
+  .hud-chip--controls {
+    display: none; /* los controles ya se aprenden en el lobby */
+  }
+}
+@media (max-width: 720px) {
+  .hud-top {
+    padding: 10px;
+    gap: 6px;
+  }
+  .hud-chip {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .hud-timer-count {
+    min-width: 76px;
+    padding: 6px 12px;
+    font-size: 20px;
+  }
+  .hud-timer-phase {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+  .hud-camo {
+    width: min(280px, calc(100vw - 32px));
+  }
+  .hud-overlay-title {
+    font-size: 22px;
+  }
+  .hud-roomcode-value {
+    font-size: 30px;
+  }
+  .hud-lobby {
+    max-width: calc(100vw - 24px);
+  }
+}
+
+/* ── Accesibilidad: sin animaciones para quien las desactiva en el sistema ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -35,9 +35,50 @@ const WOBBLE_BOB = 0.05; // m de bote vertical máximo
 
 // Scratch de ámbito de módulo: el render es monohilo y `useFrame` es síncrono.
 const _obj = new THREE.Object3D();
-const _color = new THREE.Color();
 const _counts = new Int32Array(POSE_COUNT);
 const _localPos = new THREE.Vector3();
+const _targetColor = new THREE.Color();
+
+/**
+ * Estado de PRESENTACIÓN por avatar (id → color mostrado + rebote de pose). El
+ * color mostrado persigue al real (la pintura "se extiende" en ~0.2 s en vez de
+ * cambiar de golpe) y un cambio de pose dispara un squash&stretch breve. Se crea
+ * UNA vez por jugador (nunca por frame) y se purga al vaciarse la sala.
+ */
+interface AvatarFx {
+  readonly color: THREE.Color;
+  pose: number;
+  pop: number; // 1 → 0 tras un cambio de pose
+  init: boolean;
+}
+const _fx = new Map<string, AvatarFx>();
+const PAINT_RATE = 9; // 1/s
+const POP_RATE = 4.5; // 1/s
+function fxFor(id: string): AvatarFx {
+  let f = _fx.get(id);
+  if (!f) {
+    f = { color: new THREE.Color(), pose: 0, pop: 0, init: false };
+    _fx.set(id, f);
+  }
+  return f;
+}
+/** Avanza el fx hacia (colorHex, pose) y devuelve el mismo objeto. */
+function stepFx(f: AvatarFx, colorHex: number, pose: number, dt: number): AvatarFx {
+  _targetColor.setHex(colorHex, THREE.SRGBColorSpace);
+  if (!f.init) {
+    f.color.copy(_targetColor);
+    f.pose = pose;
+    f.init = true;
+  } else {
+    f.color.lerp(_targetColor, Math.min(1, dt * PAINT_RATE));
+    if (f.pose !== pose) {
+      f.pose = pose;
+      f.pop = 1;
+    }
+  }
+  if (f.pop > 0) f.pop = Math.max(0, f.pop - dt * POP_RATE);
+  return f;
+}
 // Estado de caminata del LOCAL (presentación pura; persiste entre frames).
 let _localPrevX = 0;
 let _localPrevZ = 0;
@@ -77,7 +118,7 @@ export function Players() {
       z: number,
       aimX: number,
       aimZ: number,
-      colorHex: number,
+      fx: AvatarFx,
       wobblePhase: number,
       wobbleAmp: number,
     ): void => {
@@ -94,10 +135,12 @@ export function Players() {
         Math.atan2(aimX, aimZ), // orientado por el apunte (yaw)
         wobbles ? Math.sin(wobblePhase) * WOBBLE_ROLL * wobbleAmp : 0,
       );
+      // Rebote de pose: se estira en Y y se estrecha en XZ, volviendo a 1.
+      const pop = Math.sin(fx.pop * Math.PI) * fx.pop;
+      _obj.scale.set(1 - pop * 0.12, 1 + pop * 0.2, 1 - pop * 0.12);
       _obj.updateMatrix();
       mesh.setMatrixAt(i, _obj.matrix);
-      _color.setHex(colorHex, THREE.SRGBColorSpace);
-      mesh.setColorAt(i, _color);
+      mesh.setColorAt(i, fx.color);
       _counts[pi] = i + 1;
     };
 
@@ -124,10 +167,22 @@ export function Players() {
         _localPos.z,
         st.local.aimX,
         st.local.aimZ,
-        ((lc.r & 0xff) << 16) | ((lc.g & 0xff) << 8) | (lc.b & 0xff),
+        stepFx(
+          fxFor('local'),
+          ((lc.r & 0xff) << 16) | ((lc.g & 0xff) << 8) | (lc.b & 0xff),
+          st.local.pose,
+          dt,
+        ),
         _localPhase,
         _localAmp,
       );
+    }
+
+    // Sala vacía de remotos (saliste / sala nueva): purga los fx de jugadores idos.
+    if (st.remotes.size === 0 && _fx.size > 1) {
+      const mine = _fx.get('local');
+      _fx.clear();
+      if (mine) _fx.set('local', mine);
     }
 
     // Remotos: INTERPOLADOS en el pasado (suave entre ticks de red) + su bamboleo.
@@ -145,7 +200,7 @@ export function Players() {
         e.render.z,
         e.aimX,
         e.aimZ,
-        (e.colorPacked >>> 8) & 0xffffff,
+        stepFx(fxFor(e.id), (e.colorPacked >>> 8) & 0xffffff, e.pose, dt),
         e.wobblePhase,
         e.wobbleAmp,
       );

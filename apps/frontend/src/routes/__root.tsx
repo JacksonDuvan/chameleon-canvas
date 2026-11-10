@@ -16,7 +16,14 @@ export const Route = createRootRoute({
     ],
     // Hoja global (sistema visual del HUD, V1-G) vía <link> del head: así el SSR de
     // Start la sirve ANTES de hidratar (sin flash de HUD sin estilo).
-    links: [{ rel: 'stylesheet', href: globalsCssUrl }],
+    links: [
+      { rel: 'stylesheet', href: globalsCssUrl },
+      // Favicon inline (SVG): evita el 404 de /favicon.ico sin añadir assets.
+      {
+        rel: 'icon',
+        href: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦎</text></svg>",
+      },
+    ],
   }),
   notFoundComponent: () => (
     <main style={{ font: '16px system-ui, sans-serif', padding: 24 }}>

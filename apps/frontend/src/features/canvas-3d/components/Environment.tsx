@@ -33,9 +33,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Sky } from '@react-three/drei';
-import { POSE_FLAT, POSE_STAND } from '@mecha/sim';
+import { DEFAULT_SIM_CONFIG, POSE_FLAT, POSE_STAND, type FurnitureKind } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { buildPoseGeometries, SPHERE_SEGS_W, SPHERE_SEGS_H } from './avatarGeometry';
+import { sampleLocalMut } from '../hooks/interpolation';
 
 /** Roughness de los avatares (`MechaMesh`): señuelos y bolas lo COMPARTEN. */
 const AVATAR_ROUGHNESS = 0.8;
@@ -48,10 +49,25 @@ const AMBIENT_COLOR = '#223344';
 const AMBIENT_INTENSITY = 0.4;
 const LAMP_COLOR = '#ffd9a0'; // cálida de oficina
 const LAMP_INTENSITY = 14; // candela (decay físico)
-const LAMP_DISTANCE = 14;
+// Alcance corto: los PointLights NO proyectan sombra, así que con 14 m la luz
+// "atravesaba" los muros e iluminaba el cuarto vecino (playtest r5).
+const LAMP_DISTANCE = 9;
 const LAMP_DECAY = 2; // decaimiento físico realista (spec)
-const LAMP_Y = 2.78;
+const LAMP_Y = 2.72; // pantalla COLGANTE bajo el borde de los muros (3 m): cada cuarto solo ve las suyas
+const LAMP_LIGHT_Y = 2.6; // la luz real, un poco por debajo de la pantalla
 const LAMP_POOL = 6; // luces reales simultáneas (pool por cercanía a cámara)
+const LAMP_FADE = 5; // 1/s — fundido al reasignar una luz del pool (sin "pops")
+
+// ── Sombras del sol: el frustum SIGUE al jugador (4× más nítidas que cubrir toda la casa) ──
+const SHADOW_MAP = 2048;
+const SHADOW_EXT_PLAY = 26; // semiancho en partida (centrado en el jugador)
+const SHADOW_EXT_OVERVIEW = 52; // lobby/results: toda la casa a la vista
+const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
+
+// ── Remates decorativos de muro (zócalo + cornisa): escala y lectura de "interior" ──
+const TRIM_BASE_H = 0.16;
+const TRIM_CAP_H = 0.07;
+const TRIM_OUT = 0.03; // sobresale 3 cm del muro (nunca coplanario con él)
 
 /** Color empaquetado 0xRRGGBBAA → THREE.Color (interpretado en sRGB). */
 function toColor(packed: number): THREE.Color {
@@ -111,18 +127,97 @@ interface BuiltZone {
   readonly rotationY: number;
   readonly scale: [number, number, number];
   readonly isFloor: boolean;
+  readonly isWall: boolean;
   readonly refColor: number;
 }
 
-/** Lámpara de oficina low-poly: poste + pantalla, fusionados (para instancing). */
+/**
+ * Lámpara COLGANTE low-poly: cable + pantalla cónica, fusionados (para instancing).
+ * Antes era un poste desde el suelo: llenaba pasillos y cuartos de barras negras
+ * que el servidor no conoce (se atravesaban y tapaban la vista — playtest r5).
+ */
 function buildLampGeometry(): THREE.BufferGeometry {
-  const stem = new THREE.CylinderGeometry(0.03, 0.05, LAMP_Y, 8).translate(0, LAMP_Y / 2, 0);
-  const shade = new THREE.CylinderGeometry(0.26, 0.3, 0.14, 10).translate(0, LAMP_Y, 0);
-  const merged = mergeGeometries([stem, shade], false);
-  stem.dispose();
+  const cord = new THREE.CylinderGeometry(0.012, 0.012, 1.1, 5).translate(0, LAMP_Y + 0.65, 0);
+  const shade = new THREE.CylinderGeometry(0.1, 0.34, 0.22, 10, 1, true).translate(0, LAMP_Y, 0);
+  const cap = new THREE.CylinderGeometry(0.1, 0.1, 0.03, 10).translate(0, LAMP_Y + 0.11, 0);
+  const merged = mergeGeometries([cord, shade, cap], false);
+  cord.dispose();
   shade.dispose();
+  cap.dispose();
   if (!merged) throw new Error('Environment: fusión de lámpara fallida');
   return merged;
+}
+
+/** Caja en espacio UNITARIO (−0.5..0.5): pieza de un mueble compuesto. */
+function part(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+}
+
+/**
+ * Muebles de oficina DETALLADOS (solo presentación). Cada uno es una fusión de
+ * cajas en espacio unitario que se escala al AABB de la zona: el volumen que
+ * conoce el servidor (colisión/oclusión/camuflaje) es EXACTAMENTE el mismo.
+ * Un solo material (el color de la zona): el relieve lo lee el flat-shading.
+ * Simétricos en Z/X: el generador no orienta los muebles.
+ */
+function buildFurnitureGeometries(): Record<Exclude<FurnitureKind, 'stool'>, THREE.BufferGeometry> {
+  const fuse = (parts: THREE.BufferGeometry[]): THREE.BufferGeometry => {
+    const merged = mergeGeometries(parts, false);
+    for (const p of parts) p.dispose();
+    if (!merged) throw new Error('Environment: fusión de mueble fallida');
+    return merged;
+  };
+  return {
+    // Mesa: tablero + dos costados + cajonera retranqueada.
+    desk: fuse([
+      part(-0.5, 0.5, 0.36, 0.5, -0.5, 0.5),
+      part(-0.5, -0.45, -0.5, 0.36, -0.46, 0.46),
+      part(0.45, 0.5, -0.5, 0.36, -0.46, 0.46),
+      part(0.12, 0.45, -0.3, 0.36, -0.4, 0.4),
+      part(-0.45, 0.12, 0.0, 0.36, -0.06, 0.06),
+    ]),
+    // Archivador: cuerpo retranqueado + 4 frentes de cajón + tapa y zócalo.
+    cabinet: fuse([
+      part(-0.47, 0.47, -0.5, 0.5, -0.46, 0.46),
+      part(-0.5, 0.5, 0.46, 0.5, -0.5, 0.5),
+      part(-0.5, 0.5, -0.5, -0.46, -0.5, 0.5),
+      part(-0.42, 0.42, 0.24, 0.43, -0.5, 0.5),
+      part(-0.42, 0.42, 0.01, 0.2, -0.5, 0.5),
+      part(-0.42, 0.42, -0.22, -0.03, -0.5, 0.5),
+      part(-0.42, 0.42, -0.43, -0.26, -0.5, 0.5),
+    ]),
+    // Terminal-kiosco: peana + columna + cabezal con visera.
+    terminal: fuse([
+      part(-0.5, 0.5, -0.5, -0.44, -0.5, 0.5),
+      part(-0.3, 0.3, -0.44, 0.1, -0.3, 0.3),
+      part(-0.5, 0.5, 0.1, 0.44, -0.42, 0.42),
+      part(-0.44, 0.44, 0.44, 0.5, -0.5, 0.5),
+    ]),
+  };
+}
+let furnitureCache: ReturnType<typeof buildFurnitureGeometries> | null = null;
+function getFurnitureGeometries(): ReturnType<typeof buildFurnitureGeometries> {
+  if (!furnitureCache) furnitureCache = buildFurnitureGeometries();
+  return furnitureCache;
+}
+
+/** Taburete: asiento + fuste + base (perfil torneado, 1 draw call, unitario). */
+let stoolCache: THREE.BufferGeometry | null = null;
+function getStoolGeometry(): THREE.BufferGeometry {
+  if (!stoolCache) {
+    const pts = [
+      new THREE.Vector2(0.0, -0.5),
+      new THREE.Vector2(0.42, -0.5),
+      new THREE.Vector2(0.42, -0.44),
+      new THREE.Vector2(0.12, -0.4),
+      new THREE.Vector2(0.1, 0.24),
+      new THREE.Vector2(0.5, 0.3),
+      new THREE.Vector2(0.5, 0.5),
+      new THREE.Vector2(0.0, 0.5),
+    ];
+    stoolCache = new THREE.LatheGeometry(pts, 12);
+  }
+  return stoolCache;
 }
 
 /** Posiciones de lámparas: centros de suelos, retícula ~8 m (frío, por mapa). */
@@ -146,26 +241,28 @@ function lampPositions(zones: ReadonlyArray<{ kind: string; minX: number; maxX: 
 }
 
 /**
- * LightPool — 6 PointLights cálidas reasignadas POR FRAME a las lámparas más
- * cercanas a la cámara. Cero asignaciones (scratch preasignado), cero setState
- * (skill `r3f-rendering`). Las lámparas lejanas siguen "encendidas" visualmente
- * por su malla emisiva (instanced).
+ * LightPool — 6 PointLights cálidas asignadas a las lámparas más cercanas a la
+ * cámara. Cada luz CONSERVA su lámpara mientras siga en el top-K; cuando deja de
+ * estarlo se funde a 0 y solo entonces salta a una lámpara libre y vuelve a
+ * subir (antes se teletransportaba a plena intensidad ⇒ parpadeos al caminar).
+ * Cero asignaciones (scratch preasignado), cero setState (skill `r3f-rendering`).
  */
 function LightPool({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
   const lightsRef = useRef<Array<THREE.PointLight | null>>([]);
   const scratch = useRef({
-    dist: new Float64Array(LAMP_POOL),
-    idx: new Int32Array(LAMP_POOL),
+    idx: new Int32Array(LAMP_POOL), // top-K de este frame
+    held: new Int32Array(LAMP_POOL).fill(-1), // lámpara que tiene cada luz
     taken: new Uint8Array(1024), // marca lámparas ya elegidas (se resetea por frame)
   });
   useEffect(() => {
     scratch.current.taken = new Uint8Array(Math.max(1024, lamps.length));
+    scratch.current.held.fill(-1); // mapa nuevo: los índices viejos ya no valen
   }, [lamps]);
 
-  useFrame(({ camera }) => {
-    const { dist, idx, taken } = scratch.current;
+  useFrame(({ camera }, delta) => {
+    const { idx, held, taken } = scratch.current;
+    const k01 = Math.min(1, delta * LAMP_FADE);
     taken.fill(0);
-    dist.fill(Infinity);
     idx.fill(-1);
     const cx = camera.position.x;
     const cz = camera.position.z;
@@ -187,19 +284,38 @@ function LightPool({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }
       if (bestI < 0) break;
       taken[bestI] = 1;
       idx[k] = bestI;
-      dist[k] = bestD;
+    }
+    // `taken` pasa a significar "lámpara del top-K que YA tiene una luz".
+    taken.fill(0);
+    for (let k = 0; k < LAMP_POOL; k++) {
+      const h = held[k]!;
+      if (h < 0) continue;
+      let inSet = false;
+      for (let j = 0; j < LAMP_POOL; j++) if (idx[j] === h) inSet = true;
+      if (inSet) taken[h] = 1;
+      else if ((lightsRef.current[k]?.intensity ?? 0) < 0.05) held[k] = -1; // apagada: libre
     }
     for (let k = 0; k < LAMP_POOL; k++) {
       const light = lightsRef.current[k];
       if (!light) continue;
-      const i = idx[k]!;
-      if (i < 0) {
-        light.intensity = 0;
-        continue;
+      if (held[k]! < 0) {
+        // Luz libre: toma una lámpara del top-K que aún no tenga luz.
+        for (let j = 0; j < LAMP_POOL; j++) {
+          const cand = idx[j]!;
+          if (cand >= 0 && !taken[cand]) {
+            held[k] = cand;
+            taken[cand] = 1;
+            const lamp = lamps[cand]!;
+            light.position.set(lamp.x, LAMP_LIGHT_Y, lamp.z);
+            light.intensity = 0;
+            break;
+          }
+        }
       }
-      const lamp = lamps[i]!;
-      light.position.set(lamp.x, LAMP_Y, lamp.z);
-      light.intensity = LAMP_INTENSITY;
+      const h = held[k]!;
+      let target = 0;
+      if (h >= 0) for (let j = 0; j < LAMP_POOL; j++) if (idx[j] === h) target = LAMP_INTENSITY;
+      light.intensity += (target - light.intensity) * k01;
     }
   });
 
@@ -217,6 +333,124 @@ function LightPool({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }
           decay={LAMP_DECAY}
         />
       ))}
+    </>
+  );
+}
+
+/**
+ * SunLight — sol diagonal cuyo frustum de sombras SIGUE al jugador. Cubrir los
+ * 104 m de la casa con 2048 px daba ~5 cm/texel (sombras de contacto borrosas);
+ * centrado en el jugador con ±26 m son ~2.5 cm. El centro se ajusta a la rejilla
+ * de texels EN ESPACIO DE LUZ para que las sombras no "naden" al caminar. En
+ * lobby/results (vista aérea) vuelve a cubrir toda la casa.
+ */
+const _sunDir = new THREE.Vector3(...SUN_POSITION).normalize();
+const _sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), _sunDir).normalize();
+const _sunUp = new THREE.Vector3().crossVectors(_sunDir, _sunRight).normalize();
+const _sunCenter = new THREE.Vector3();
+function SunLight() {
+  const ref = useRef<THREE.DirectionalLight>(null);
+  const target = useMemo(() => new THREE.Object3D(), []);
+  useEffect(() => {
+    if (ref.current) ref.current.target = target;
+  }, [target]);
+
+  useFrame(() => {
+    const light = ref.current;
+    if (!light) return;
+    const st = worldStore.getState();
+    const inRound = st.phase === 'prep' || st.phase === 'hunt';
+    const ext = inRound ? SHADOW_EXT_PLAY : SHADOW_EXT_OVERVIEW;
+    const cam = light.shadow.camera;
+    if (cam.right !== ext) {
+      cam.left = -ext;
+      cam.right = ext;
+      cam.top = ext;
+      cam.bottom = -ext;
+      cam.updateProjectionMatrix(); // solo al cambiar de fase
+    }
+    if (inRound) {
+      sampleLocalMut(st.localPrevPos, st.local.pos, st.localPredAt, performance.now(), TICK_MS, _sunCenter);
+      _sunCenter.y = 0;
+      const texel = (2 * ext) / SHADOW_MAP;
+      const r = _sunCenter.dot(_sunRight);
+      const u = _sunCenter.dot(_sunUp);
+      _sunCenter
+        .addScaledVector(_sunRight, Math.round(r / texel) * texel - r)
+        .addScaledVector(_sunUp, Math.round(u / texel) * texel - u);
+    } else {
+      _sunCenter.set(0, 0, 0);
+    }
+    target.position.copy(_sunCenter);
+    target.updateMatrixWorld();
+    light.position.copy(_sunCenter).addScaledVector(_sunDir, 60);
+  });
+
+  return (
+    <>
+      <primitive object={target} />
+      <directionalLight
+        ref={ref}
+        position={SUN_POSITION}
+        color="#fff4e0"
+        intensity={1.9}
+        castShadow
+        shadow-mapSize-width={SHADOW_MAP}
+        shadow-mapSize-height={SHADOW_MAP}
+        shadow-camera-left={-SHADOW_EXT_OVERVIEW}
+        shadow-camera-right={SHADOW_EXT_OVERVIEW}
+        shadow-camera-top={SHADOW_EXT_OVERVIEW}
+        shadow-camera-bottom={-SHADOW_EXT_OVERVIEW}
+        shadow-camera-near={4}
+        shadow-camera-far={130}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.05}
+      />
+    </>
+  );
+}
+
+/**
+ * Remates de muro (zócalo oscuro + cornisa clara): 2 InstancedMesh para TODOS los
+ * muros. Un único color por remate ⇒ los solapes coplanarios en las esquinas son
+ * invisibles (mismo material, misma normal). `noSample`: no existen para el
+ * servidor, así que ni el cuentagotas ni el trazador los ven.
+ */
+const TRIM_BASE_MAT = new THREE.MeshStandardMaterial({ color: '#4b443d', roughness: 0.9 });
+const TRIM_CAP_MAT = new THREE.MeshStandardMaterial({ color: '#f1ebdd', roughness: 0.85 });
+const NO_SAMPLE = { noSample: true };
+function WallTrim({ walls }: { walls: ReadonlyArray<BuiltZone> }) {
+  const baseRef = useRef<THREE.InstancedMesh>(null);
+  const capRef = useRef<THREE.InstancedMesh>(null);
+  useEffect(() => {
+    const base = baseRef.current;
+    const cap = capRef.current;
+    if (!base || !cap) return;
+    const o = new THREE.Object3D();
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i]!;
+      const top = w.position[1] + w.scale[1] / 2;
+      const bottom = w.position[1] - w.scale[1] / 2;
+      o.position.set(w.position[0], bottom + TRIM_BASE_H / 2, w.position[2]);
+      o.scale.set(w.scale[0] + TRIM_OUT * 2, TRIM_BASE_H, w.scale[2] + TRIM_OUT * 2);
+      o.updateMatrix();
+      base.setMatrixAt(i, o.matrix);
+      o.position.set(w.position[0], top + TRIM_CAP_H / 2, w.position[2]);
+      o.scale.set(w.scale[0] + TRIM_OUT * 2, TRIM_CAP_H, w.scale[2] + TRIM_OUT * 2);
+      o.updateMatrix();
+      cap.setMatrixAt(i, o.matrix);
+    }
+    base.count = walls.length;
+    cap.count = walls.length;
+    base.instanceMatrix.needsUpdate = true;
+    cap.instanceMatrix.needsUpdate = true;
+  }, [walls]);
+  // key por capacidad: un mapa con más muros que el anterior recrea el buffer.
+  const cap = Math.max(1, walls.length);
+  return (
+    <>
+      <instancedMesh key={`b${cap}`} ref={baseRef} args={[UNIT_BOX, TRIM_BASE_MAT, cap]} receiveShadow frustumCulled={false} userData={NO_SAMPLE} />
+      <instancedMesh key={`c${cap}`} ref={capRef} args={[UNIT_BOX, TRIM_CAP_MAT, cap]} receiveShadow frustumCulled={false} userData={NO_SAMPLE} />
     </>
   );
 }
@@ -249,7 +483,8 @@ function OfficeReflections() {
 function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
   const geo = useMemo(buildLampGeometry, []);
   const mat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#3a3f46', roughness: 0.6, metalness: 0.4 }),
+    () =>
+      new THREE.MeshStandardMaterial({ color: '#3a3f46', roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide }),
     [],
   );
   const bulbMat = useMemo(
@@ -257,7 +492,7 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
       new THREE.MeshStandardMaterial({
         color: LAMP_COLOR,
         emissive: LAMP_COLOR,
-        emissiveIntensity: 1.6,
+        emissiveIntensity: 2.4,
       }),
     [],
   );
@@ -273,7 +508,7 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
       const lamp = lamps[i]!;
       m.makeTranslation(lamp.x, 0, lamp.z);
       im.setMatrixAt(i, m);
-      m.makeTranslation(lamp.x, LAMP_Y - 0.1, lamp.z);
+      m.makeTranslation(lamp.x, LAMP_Y - 0.04, lamp.z);
       bulbs.setMatrixAt(i, m);
     }
     im.count = lamps.length;
@@ -292,8 +527,10 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
   );
   return (
     <>
-      <instancedMesh ref={ref} args={[geo, mat, Math.max(1, lamps.length)]} castShadow />
-      <instancedMesh ref={bulbRef} args={[bulbGeo, bulbMat, Math.max(1, lamps.length)]} />
+      {/* key por capacidad (un mapa con más lámparas recrea el buffer); sin culling:
+          la bounding sphere de la geometría está en el origen. `noSample`: decoración. */}
+      <instancedMesh key={`l${Math.max(1, lamps.length)}`} ref={ref} args={[geo, mat, Math.max(1, lamps.length)]} frustumCulled={false} userData={NO_SAMPLE} />
+      <instancedMesh key={`b${Math.max(1, lamps.length)}`} ref={bulbRef} args={[bulbGeo, bulbMat, Math.max(1, lamps.length)]} frustumCulled={false} userData={NO_SAMPLE} />
     </>
   );
 }
@@ -361,6 +598,10 @@ export function Environment() {
         scale[0] = 1;
         scale[1] = 1;
         scale[2] = 1;
+      } else if (z.furniture === 'stool') {
+        geometry = getStoolGeometry(); // unitario: escala = AABB de la zona
+      } else if (z.furniture) {
+        geometry = getFurnitureGeometries()[z.furniture];
       } else if (z.shape === 'cylinder') {
         geometry = UNIT_CYL;
         const diam = Math.min(w, d);
@@ -385,12 +626,14 @@ export function Environment() {
         rotationY: ((z.rot ?? 0) * Math.PI) / 2,
         scale,
         isFloor,
+        isWall: z.kind === 'wall',
         refColor: z.color,
       };
     });
     // NOTA: nada que disponer aquí — geometrías unitarias y materiales son
     // COMPARTIDOS y sobreviven a la ronda; las de poses las administra MechaMesh.
   }, [map]);
+  const walls = useMemo(() => built.filter((z) => z.isWall), [built]);
 
   return (
     <>
@@ -400,23 +643,9 @@ export function Environment() {
       {/* Relleno tenue y FRÍO de sombras (spec: #223344 · 0.4). */}
       <ambientLight color={AMBIENT_COLOR} intensity={AMBIENT_INTENSITY} />
       {/* Sol diagonal: volumen general + sombras 2048 sobre TODA la casa. */}
-      <directionalLight
-        position={SUN_POSITION}
-        color="#fff4e0"
-        intensity={1.9}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-52}
-        shadow-camera-right={52}
-        shadow-camera-top={52}
-        shadow-camera-bottom={-52}
-        shadow-camera-near={4}
-        shadow-camera-far={110}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.05}
-      />
+      <SunLight />
       {/* Lámparas de oficina: mallas instanciadas + pool de PointLights cálidas. */}
+      <WallTrim walls={walls} />
       <Lamps lamps={lamps} />
       <LightPool lamps={lamps} />
       {/* Reflexiones sutiles (PMREM procedural local) para los suelos pulidos. */}
@@ -458,7 +687,9 @@ export function Environment() {
             geometry={z.geometry}
             material={z.material}
             position={z.position}
-            scale={[z.scale[0], z.scale[1], 1]}
+            // Plano XY girado: ancho=X, alto local=profundidad Z. (Bug r5: usaba la
+            // ALTURA de la zona —0 en suelos— y los suelos de color eran invisibles.)
+            scale={[z.scale[0], z.scale[2], 1]}
             rotation-x={-Math.PI / 2}
             receiveShadow
             userData={{ refColor: z.refColor }}
