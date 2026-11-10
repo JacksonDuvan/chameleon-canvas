@@ -53,7 +53,8 @@ const LAMP_INTENSITY = 14; // candela (decay físico)
 // "atravesaba" los muros e iluminaba el cuarto vecino (playtest r5).
 const LAMP_DISTANCE = 9;
 const LAMP_DECAY = 2; // decaimiento físico realista (spec)
-const LAMP_Y = 2.72; // pantalla COLGANTE bajo el borde de los muros (3 m): cada cuarto solo ve las suyas
+const LAMP_Y = 3.45; // pantalla COLGANTE por ENCIMA de la cámara en 3ª persona (≤3 m): a 2.7 m se
+// interponía entre la cámara y el avatar (playtest r6)
 const LAMP_LIGHT_Y = 2.6; // la luz real, un poco por debajo de la pantalla
 const LAMP_POOL = 6; // luces reales simultáneas (pool por cercanía a cámara)
 const LAMP_FADE = 5; // 1/s — fundido al reasignar una luz del pool (sin "pops")
@@ -137,9 +138,9 @@ interface BuiltZone {
  * que el servidor no conoce (se atravesaban y tapaban la vista — playtest r5).
  */
 function buildLampGeometry(): THREE.BufferGeometry {
-  const cord = new THREE.CylinderGeometry(0.012, 0.012, 1.1, 5).translate(0, LAMP_Y + 0.65, 0);
-  const shade = new THREE.CylinderGeometry(0.1, 0.34, 0.22, 10, 1, true).translate(0, LAMP_Y, 0);
-  const cap = new THREE.CylinderGeometry(0.1, 0.1, 0.03, 10).translate(0, LAMP_Y + 0.11, 0);
+  const cord = new THREE.CylinderGeometry(0.01, 0.01, 0.5, 5).translate(0, LAMP_Y + 0.34, 0);
+  const shade = new THREE.CylinderGeometry(0.07, 0.24, 0.16, 10, 1, true).translate(0, LAMP_Y, 0);
+  const cap = new THREE.CylinderGeometry(0.07, 0.07, 0.03, 10).translate(0, LAMP_Y + 0.08, 0);
   const merged = mergeGeometries([cord, shade, cap], false);
   cord.dispose();
   shade.dispose();
@@ -496,7 +497,7 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
       }),
     [],
   );
-  const bulbGeo = useMemo(() => new THREE.SphereGeometry(0.09, 8, 6), []);
+  const bulbGeo = useMemo(() => new THREE.SphereGeometry(0.07, 8, 6), []);
   const ref = useRef<THREE.InstancedMesh>(null);
   const bulbRef = useRef<THREE.InstancedMesh>(null);
   useEffect(() => {

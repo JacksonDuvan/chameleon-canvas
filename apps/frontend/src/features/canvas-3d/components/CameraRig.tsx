@@ -34,50 +34,53 @@ const _desired = new THREE.Vector3();
 const _lookDir = new THREE.Vector3();
 const _lp = new THREE.Vector3(); // pos local SUAVIZADA entre ticks (sin temblor)
 
-const CAM_PAD = 0.4; // separación cámara↔muro
-const CAM_MIN_DIST = 0.5; // distancia mínima al objetivo
-const CAM_LIFT_FROM = 3.2; // por debajo de esta distancia la cámara empieza a SUBIR
-const CAM_LIFT_GAIN = 1.25; // m de altura extra por m de distancia perdida
+const CAM_PAD = 0.45; // separación cámara↔muro
+const CAM_MIN_H = 0.6; // distancia horizontal mínima al avatar
+const CAM_SIDE = 0.3; // semiancho de la cámara (rayos laterales paralelos)
+const CAM_LOW_Y = 2.65; // con un muro detrás la cámara baja del borde del muro (3 m)
+const CAM_IN_RATE = 14; // 1/s — acercarse (rápido: no atravesar el muro)
+const CAM_OUT_RATE = 3.5; // 1/s — alejarse (lento: sin tirones al liberar)
+const CAM_Y_RATE = 6; // 1/s — cambio de altura
+
+// Estado SUAVIZADO de la cámara en tercera persona (persistente entre frames).
+let _camH = TP_DIST;
+let _camY = TP_HEIGHT;
 
 /**
- * Colisión de la cámara en tercera persona (playtest r5: la cámara quedaba
- * DETRÁS/DENTRO de los muros en pasillos y cuartos). Rayo objetivo→cámara contra
- * los AABB de los MUROS del mapa compartido (los props bajos no cuentan: se mira
- * por encima); si algo lo corta, la cámara se acerca hasta quedar delante Y SUBE:
- * pegado de espaldas a un muro (lo normal al esconderse) la vista pasa a ser un
- * picado sobre el avatar en vez de meterse dentro de su cabeza.
- * Sin asignaciones: ~200 muros × rayAABB por frame.
+ * Espacio libre HORIZONTAL detrás del avatar (playtest r5/r6). Tres rayos
+ * paralelos (centro ± CAM_SIDE) contra los AABB de los MUROS del mapa compartido;
+ * los muros se tratan como infinitamente altos, así la cámara se queda siempre
+ * DENTRO del cuarto. Devuelve la distancia utilizable (≤ TP_DIST). Sin
+ * asignaciones: ~200 muros × 3 rayAABB por frame.
+ *
+ * La v1 recortaba la posición YA interpolada y además subía la cámara por encima
+ * del muro: cada frame cambiaba la dirección del rayo ⇒ SALTOS, y la cornisa del
+ * muro llenaba media pantalla. Ahora el recorte depende solo del yaw y el
+ * resultado se filtra en el tiempo.
  */
-function clampCameraToWalls(map: MapData, target: THREE.Vector3, cam: THREE.Vector3): void {
-  let dx = cam.x - target.x;
-  let dy = cam.y - target.y;
-  let dz = cam.z - target.z;
-  const dist = Math.hypot(dx, dy, dz);
-  if (dist < 1e-4) return;
-  dx /= dist;
-  dy /= dist;
-  dz /= dist;
-  let best = dist;
+function freeSpaceBehind(map: MapData, x: number, z: number, bx: number, bz: number): number {
+  let best = TP_DIST + CAM_PAD;
   const zones = map.zones;
   for (let i = 0; i < zones.length; i++) {
     const zn = zones[i]!;
     if (zn.kind !== 'wall') continue;
-    const t = rayAABB(
-      target.x, target.y, target.z, dx, dy, dz,
-      zn.minX, zn.y - zn.height / 2, zn.minZ,
-      zn.maxX, zn.y + zn.height / 2, zn.maxZ,
-    );
-    if (t !== null && t < best) best = t;
+    for (let k = -1; k <= 1; k++) {
+      // Desplazamiento lateral: perpendicular a (bx,bz) en el plano XZ.
+      const t = rayAABB(
+        x - bz * CAM_SIDE * k, 1.5, z + bx * CAM_SIDE * k, bx, 0, bz,
+        zn.minX, -1, zn.minZ,
+        zn.maxX, 99, zn.maxZ,
+      );
+      if (t !== null && t < best) best = t;
+    }
   }
-  if (best >= dist) return;
-  const d = Math.max(CAM_MIN_DIST, best - CAM_PAD);
-  if (d >= dist) return;
-  const lift = Math.max(0, CAM_LIFT_FROM - d) * CAM_LIFT_GAIN;
-  cam.set(target.x + dx * d, target.y + dy * d + lift, target.z + dz * d);
+  return Math.max(CAM_MIN_H, Math.min(TP_DIST, best - CAM_PAD));
 }
 
 export function CameraRig() {
   const camera = useThree((s) => s.camera);
+  // SOLO dev: expone la cámara para medir saltos en los E2E headless.
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__cam = camera;
   useFrame((_, delta) => {
     const st = worldStore.getState();
     // La cámara sigue la MISMA pos suavizada que dibuja MechaMesh (sim a 30 Hz,
@@ -117,10 +120,16 @@ export function CameraRig() {
       const fx = -Math.sin(lookState.yaw);
       const fz = -Math.cos(lookState.yaw);
       const lift = TP_HEIGHT - lookState.pitch * 2; // mirar arriba baja la cámara y viceversa
+      // Distancia y altura FILTRADAS: entra rápido, sale despacio, nunca de golpe.
+      const dt = Math.min(delta, 0.1);
+      const freeH = freeSpaceBehind(st.map, lp.x, lp.z, -fx, -fz);
+      _camH += (freeH - _camH) * Math.min(1, dt * (freeH < _camH ? CAM_IN_RATE : CAM_OUT_RATE));
+      // Con algo detrás, la cámara se queda bajo el borde del muro (dentro del cuarto).
+      const wantY = freeH < TP_DIST - 0.05 ? Math.min(lift, CAM_LOW_Y) : lift;
+      _camY += (wantY - _camY) * Math.min(1, dt * CAM_Y_RATE);
       _target.set(lp.x, lp.y + 1.2, lp.z);
-      _desired.set(lp.x - fx * TP_DIST, lp.y + lift, lp.z - fz * TP_DIST);
+      _desired.set(lp.x - fx * _camH, lp.y + _camY, lp.z - fz * _camH);
       camera.position.lerp(_desired, 1 - Math.pow(0.000001, delta));
-      clampCameraToWalls(st.map, _target, camera.position);
       camera.lookAt(_target);
       return;
     }
