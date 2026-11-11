@@ -26,6 +26,8 @@ function mkPlayer(id: string, over: Partial<WirePlayer> = {}): WirePlayer {
     camoScore: 0,
     pose: 0,
     ammo: 0,
+    vy: 0,
+    grounded: true,
     ...over,
   };
 }
@@ -52,6 +54,7 @@ describe('wire · INPUT', () => {
       aimZ: -0.694,
       pose: 2, // bola
       action: ActionKind.CATCH,
+      jump: false,
     };
     const decoded = decodeInput(encodeInput(input).slice().buffer);
     expect(decoded.seq).toBe(123456);
@@ -171,5 +174,45 @@ describe('wire · DELTA', () => {
     const snapShot = decodeSnapshot(encodeDelta(base2, shot).slice().buffer);
     expect(snapShot.players.map((p) => p.id)).toEqual(['b']);
     expect(snapShot.players[0]!.ammo).toBe(9);
+  });
+});
+
+describe('wire v7 · salto y poses de mueble', () => {
+  it('INPUT lleva la intención de saltar', () => {
+    const base = { seq: 1, moveX: 0, moveZ: 0, aimX: 0, aimY: 0, aimZ: 1, pose: 0, action: ActionKind.NONE };
+    expect(decodeInput(encodeInput({ ...base, jump: true }).slice().buffer).jump).toBe(true);
+    expect(decodeInput(encodeInput({ ...base, jump: false }).slice().buffer).jump).toBe(false);
+  });
+
+  it('INPUT de un cliente v6 (sin byte de flags) decodifica sin saltar ni lanzar', () => {
+    const v7 = encodeInput({
+      seq: 9, moveX: 1, moveZ: 0, aimX: 0, aimY: 0, aimZ: 1, pose: 3, action: ActionKind.NONE, jump: true,
+    }).slice();
+    const v6 = v7.slice(0, v7.length - 1).buffer;
+    const d = decodeInput(v6);
+    expect(d.seq).toBe(9);
+    expect(d.pose).toBe(3);
+    expect(d.jump).toBe(false);
+  });
+
+  it('SNAPSHOT conserva pose 0..9 (4 bits), grounded y vy', () => {
+    for (let pose = 0; pose < 10; pose++) {
+      const w = mkWorld([mkPlayer('a', { pose, grounded: false, vy: -7.25, pos: { x: 1, y: 2.5, z: 3 } })]);
+      const p = decodeSnapshot(encodeKeyframe(w).slice().buffer).players[0]!;
+      expect(p.pose).toBe(pose);
+      expect(p.grounded).toBe(false);
+      expect(p.vy).toBeCloseTo(-7.25, 2);
+      expect(p.y).toBeCloseTo(2.5, 2);
+    }
+    const g = decodeSnapshot(encodeKeyframe(mkWorld([mkPlayer('a', { grounded: true })])).slice().buffer);
+    expect(g.players[0]!.grounded).toBe(true);
+  });
+
+  it('el delta detecta un cambio SOLO de velocidad vertical', () => {
+    const p = mkPlayer('a');
+    const w = mkWorld([p]);
+    const base = captureBaseline(w);
+    const w2 = mkWorld([{ ...p, vy: 3 }]);
+    expect(decodeSnapshot(encodeDelta(base, w2).slice().buffer).players).toHaveLength(1);
   });
 });

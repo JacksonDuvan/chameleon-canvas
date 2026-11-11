@@ -32,6 +32,7 @@ function commandsForTick(tick: number): UserCommand[] {
     aimZ: 0,
     pose: tick & 3, // ejercita el camino de poses en el replay
     action: ActionKind.CATCH,
+    jump: false,
   }));
 }
 

@@ -4,8 +4,9 @@
  *  - WASD se interpreta RELATIVO A LA CÁMARA (adelante = hacia donde miras).
  *  - El apunte (`aimX/aimY/aimZ`) sale del yaw/pitch del ratón (`lookState`), no de la
  *    dirección de movimiento: el Seeker apunta con el ratón como en un FPS.
- *  - 'R' cicla la pose del Hider (de pie → agachado → bola → plano); viaja como campo
- *    idempotente del comando y el servidor la valida (rol/fase/frozen).
+ *  - 'R' cicla la pose del Hider y los NÚMEROS la eligen directa (10 figuras); viaja
+ *    como campo idempotente del comando y el servidor la valida (rol/fase/frozen).
+ *  - ESPACIO salta (mantenido = salta al aterrizar); el servidor valida apoyo y fase.
  *  - DISPARO (modelo del original): click (con el ratón capturado) o 'F' = 1 disparo
  *    por pulsación (flanco, no mantenido). La munición y el impacto los resuelve el
  *    servidor. No hay congelado voluntario: en Hunt el servidor congela a los Hiders.
@@ -37,7 +38,16 @@ export function useLocalInput(sockets: GameSockets): void {
 
     const down = (e: KeyboardEvent): void => {
       const k = e.key.toLowerCase();
-      if (k === 'r' && !e.repeat) pose = (pose + 1) % POSE_COUNT; // cicla las 6 poses
+      if (k === 'r' && !e.repeat) pose = (pose + 1) % POSE_COUNT; // cicla todas las poses
+      // Selección DIRECTA de pose con los números (1..9, 0 = décima): con 10 figuras
+      // ciclar con R era lento. `e.code` para no depender de la distribución del teclado.
+      if (!e.repeat && e.code.startsWith('Digit')) {
+        const n = Number(e.code.slice(5));
+        const idx = n === 0 ? 9 : n - 1;
+        if (idx < POSE_COUNT) pose = idx;
+      }
+      // Espacio = saltar: que no haga scroll ni "pulse" el botón enfocado del HUD.
+      if (e.code === 'Space') e.preventDefault();
       if (k === 'f' && !e.repeat) pendingKeyShots++;
       // V1-H rework: silbido manual del Hider — gating local por UX; el servidor
       // valida autoritativamente (rol, fase hunt, cooldown).
@@ -57,6 +67,9 @@ export function useLocalInput(sockets: GameSockets): void {
       keys.add(k);
     };
     const up = (e: KeyboardEvent): void => void keys.delete(e.key.toLowerCase());
+    // Al perder el foco no llegan los keyup: sin esto te quedas andando/saltando solo.
+    const blur = (): void => keys.clear();
+    window.addEventListener('blur', blur);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
 
@@ -99,13 +112,14 @@ export function useLocalInput(sockets: GameSockets): void {
         }
       }
 
-      sockets.sendInput({ moveX, moveZ, aimX, aimY, aimZ, pose, action });
+      sockets.sendInput({ moveX, moveZ, aimX, aimY, aimZ, pose, action, jump: keys.has(' ') });
     }, TICK_MS);
 
     return () => {
       clearInterval(id);
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
     };
   }, [sockets]);
 }

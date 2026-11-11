@@ -28,6 +28,10 @@ export class PlayerState {
   camoScore: number; // 0..1 cuán camuflado está este Hider (viaja en el snapshot)
   ammo: number; // disparos restantes del Seeker (limitados; viaja en el snapshot)
   shotCooldownUntil: number; // (solo servidor) tick hasta el que no puede volver a disparar
+  // ── Salto (playtest r6): eje vertical, predicho por el cliente (viaja en el wire) ──
+  vy: number; // velocidad vertical (m/s)
+  grounded: boolean; // apoyado en el suelo o sobre un mueble
+  lastVertTick: number; // (solo servidor) último tick en que se integró su eje vertical
 
   constructor(id: string, role: PlayerRole = 'hider') {
     this.id = id;
@@ -46,5 +50,8 @@ export class PlayerState {
     this.camoScore = 0;
     this.ammo = 0;
     this.shotCooldownUntil = 0;
+    this.vy = 0;
+    this.grounded = true;
+    this.lastVertTick = 0;
   }
 }

@@ -33,8 +33,24 @@ export function removePlayer(world: WorldState, id: string): void {
   world.players.delete(id);
 }
 
-/** Arranca la ronda: asigna roles deterministamente y pasa a Prep. */
-export function startGame(world: WorldState, rng: Rng): void {
+/** Seekers por defecto si el host no elige: 1 de cada 4 jugadores (mínimo 1). */
+export function defaultSeekerCount(players: number): number {
+  return Math.max(1, Math.floor(players / 4));
+}
+
+/** Sanea la cantidad de Seekers pedida por el host: entre 1 y (jugadores − 1), para
+ *  que siempre quede al menos un Hider. Valores no enteros/ausentes ⇒ automático. */
+export function clampSeekerCount(requested: number | undefined, players: number): number {
+  if (requested === undefined || !Number.isInteger(requested)) return defaultSeekerCount(players);
+  const max = Math.max(1, players - 1);
+  return requested < 1 ? 1 : requested > max ? max : requested;
+}
+
+/**
+ * Arranca la ronda: asigna roles deterministamente y pasa a Prep. `seekers` = cuántos
+ * buscan (opción del host, playtest r6); sin él, reparto automático.
+ */
+export function startGame(world: WorldState, rng: Rng, seekers?: number): void {
   if (world.phase !== 'lobby') return;
 
   const ids: string[] = [];
@@ -52,7 +68,7 @@ export function startGame(world: WorldState, rng: Rng): void {
   // lados vía el wire) → el escenario cambia cada ronda y el Seeker no se lo aprende.
   world.mapSeed = (rng.nextInt(0x7fffffff) ^ (world.tick + 1)) >>> 0 || 1;
 
-  const seekerCount = Math.max(1, Math.floor(ids.length / 4));
+  const seekerCount = clampSeekerCount(seekers, ids.length);
   for (let i = 0; i < ids.length; i++) {
     const p = world.players.get(ids[i]!);
     if (!p) continue;
@@ -63,6 +79,9 @@ export function startGame(world: WorldState, rng: Rng): void {
     // Economía de disparos (original): los Seekers reciben munición limitada.
     p.ammo = p.role === 'seeker' ? world.config.shotAmmo : 0;
     p.shotCooldownUntil = 0;
+    p.pos.y = 0; // nadie empieza la ronda en el aire ni subido a un mueble del lobby
+    p.vy = 0;
+    p.grounded = true;
   }
 
   world.phase = 'prep';
@@ -87,6 +106,8 @@ export function resetToLobby(world: WorldState): void {
     p.pose = 0;
     p.ammo = 0;
     p.shotCooldownUntil = 0;
+    p.vy = 0;
+    p.grounded = true;
     p.pos.setMut(((i % 5) - 2) * 2, 0, (Math.floor(i / 5) - 2) * 2);
     i++;
   }

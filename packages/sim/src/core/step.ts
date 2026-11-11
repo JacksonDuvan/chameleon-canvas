@@ -20,12 +20,15 @@ import type { WorldState } from './entities/WorldState';
 import type { Rng } from './rng';
 import type { IPhysicsWorld } from '../physics/IPhysicsWorld';
 import { advancePhaseIfDue, anyHiderAlive } from './phases';
-import { applyAim, applyMovement, canMove } from './movement';
+import { applyAim, applyMovement, applyVertical, canMove } from './movement';
 import { computeCamouflage } from './camouflage';
 import { DEFAULT_MAP, referenceColorAt, type MapData } from './map/MapData';
 import { clampPose } from './pose';
 import { ColorRGBA } from './value-objects/ColorRGBA';
 import { ActionKind, type UserCommand } from '@shared/protocol';
+
+/** Ticks sin comandos tras los que el servidor integra la caída por su cuenta. */
+const STALE_VERTICAL_TICKS = 10;
 
 // Scratch de módulo para el color de referencia del entorno (sin asignar por-tick).
 const _refColor = new ColorRGBA();
@@ -60,7 +63,11 @@ export function step(
 
     p.lastProcessedInput = cmd.seq; // estampa para la reconciliación del cliente
     applyAim(p, cmd); // re-normaliza el apunte 3D (mismas funciones que la predicción)
-    if (canMove(world.phase, p)) applyMovement(p, cmd, cfg, dt, map);
+    const mobile = canMove(world.phase, p);
+    if (mobile) applyMovement(p, cmd, cfg, dt, map);
+    // Eje vertical: SIEMPRE (la gravedad no depende de poder moverse); el salto sí.
+    applyVertical(p, mobile && cmd.jump, cfg, dt, map);
+    p.lastVertTick = world.tick;
 
     // Pose (V1-B): solo el Hider, en Prep y sin congelar (en Hunt queda fija).
     // `clampPose` sanea el valor del cliente (anti-cheat). El cliente la predice con
@@ -71,6 +78,16 @@ export function step(
 
     if (cmd.action === ActionKind.CATCH && p.role === 'seeker' && world.phase === 'hunt') {
       anyShot = true; // resuelto en el pase 3 (tras integrar el movimiento de todos)
+    }
+  }
+
+  // ── Pase 1b: gravedad para quien lleva rato SIN mandar comandos (cliente colgado
+  //    o desconectado en el aire). No se aplica a los activos: su eje vertical se
+  //    integra una vez POR COMANDO (como en la predicción); hacerlo además por tick
+  //    vacío los haría caer más rápido que lo que predicen con jitter de red. ──
+  for (const p of world.players.values()) {
+    if (!p.grounded && world.tick - p.lastVertTick > STALE_VERTICAL_TICKS) {
+      applyVertical(p, false, cfg, dt, map);
     }
   }
 

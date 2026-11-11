@@ -18,6 +18,7 @@ function pending(seq: number, moveX = 1): PendingInput {
     aimZ: 0,
     pose: 0,
     action: ActionKind.NONE,
+    jump: false,
   };
   return { seq, cmd, dt: DT };
 }
@@ -35,6 +36,8 @@ function authAt(lastProcessedInput: number, x: number): AuthoritativeLocal {
     frozen: false,
     caught: false,
     pose: 0,
+    vy: 0,
+    grounded: true,
   };
 }
 
@@ -131,6 +134,8 @@ describe('reconcile', () => {
       frozen: false,
       caught: true,
       pose: 2,
+      vy: 0,
+      grounded: true,
     };
     reconcile(local, [], auth, 'hunt', cfg);
     expect(local.role).toBe('seeker');
@@ -138,5 +143,43 @@ describe('reconcile', () => {
     expect(local.pose).toBe(2);
     expect(local.aimY).toBe(-0.5); // el pitch también se reconcilia (aim 3D completo)
     expect([local.pos.x, local.pos.z]).toEqual([1, 2]);
+  });
+
+  it('predice el SALTO igual que el servidor y re-predice en el aire tras reconciliar', () => {
+    const local = new PlayerState('local', 'hider');
+    const jump = (seq: number): PendingInput => ({
+      seq,
+      dt: DT,
+      cmd: { ...pending(seq, 0).cmd, jump: true },
+    });
+    const queue: PendingInput[] = [];
+    for (let seq = 1; seq <= 6; seq++) {
+      const input = jump(seq);
+      predict(local, input, 'prep', cfg);
+      queue.push(input);
+    }
+    expect(local.grounded).toBe(false);
+    const predictedY = local.pos.y;
+    expect(predictedY).toBeGreaterThan(0.5);
+
+    // El servidor confirma hasta el input 3 con SU estado (mismas funciones): al
+    // re-aplicar 4..6 encima, el resultado debe coincidir con lo ya predicho.
+    const server = new PlayerState('local', 'hider');
+    for (let seq = 1; seq <= 3; seq++) predict(server, jump(seq), 'prep', cfg);
+    reconcile(
+      local,
+      queue,
+      {
+        ...authAt(3, 0),
+        y: server.pos.y,
+        vy: server.vy,
+        grounded: server.grounded,
+      },
+      'prep',
+      cfg,
+    );
+    expect(queue).toHaveLength(3);
+    expect(local.pos.y).toBeCloseTo(predictedY, 9);
+    expect(local.grounded).toBe(false);
   });
 });

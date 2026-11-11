@@ -23,7 +23,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { POSE_COUNT } from '@mecha/sim';
+import { FURNITURE_SPECS, POSE_COUNT, type FurnitureKind } from '@mecha/sim';
+import { buildFurnitureSized } from './furnitureGeometry';
 
 /** Desborde máximo (m) de la silueta visual respecto al hitbox del server. */
 export const VISUAL_FRINGE = 0.12;
@@ -141,8 +142,25 @@ function buildFlat(): THREE.BufferGeometry {
 
 /** Una geometría fusionada por pose, indexada por el valor de pose del sim (0..5). */
 export function buildPoseGeometries(): THREE.BufferGeometry[] {
-  // Orden = POSE_STAND, CROUCH, BALL, FLAT, BOX, CYLINDER (índices del sim).
-  const out = [buildStand(), buildCrouch(), buildBall(), buildFlat(), buildBox(), buildCylinder()];
+  // Orden = POSE_STAND, CROUCH, BALL, FLAT, BOX, CYLINDER, CABINET, DESK, TERMINAL,
+  // STOOL (índices del sim). Los muebles usan la MISMA geometría y medidas que los
+  // del mapa (`furnitureGeometry` + `FURNITURE_SPECS`): mimetismo exacto.
+  const furniture = (kind: FurnitureKind): THREE.BufferGeometry => {
+    const s = FURNITURE_SPECS[kind];
+    return buildFurnitureSized(kind, s.w, s.h, s.d);
+  };
+  const out = [
+    buildStand(),
+    buildCrouch(),
+    buildBall(),
+    buildFlat(),
+    buildBox(),
+    buildCylinder(),
+    furniture('cabinet'),
+    furniture('desk'),
+    furniture('terminal'),
+    furniture('stool'),
+  ];
   if (out.length !== POSE_COUNT) throw new Error('avatarGeometry: falta una pose');
   return out;
 }

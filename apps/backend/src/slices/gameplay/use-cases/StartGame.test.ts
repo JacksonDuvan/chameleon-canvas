@@ -41,4 +41,15 @@ describe('StartGame', () => {
     const { start } = setup(room);
     expectErr(await start.execute({ roomId: 'r1', playerId: 'p0' }), 'AlreadyStarted');
   });
+
+  it('el host elige cuántos buscan; el resto se esconde (y siempre queda un Hider)', async () => {
+    const count = (room: { world: { players: Map<string, { role: string }> } }): number =>
+      [...room.world.players.values()].filter((p) => p.role === 'seeker').length;
+
+    const three = setup(roomWith(6));
+    expect(count(expectOk(await three.start.execute({ roomId: 'r1', playerId: 'p0', seekers: 3 })))).toBe(3);
+
+    const tooMany = setup(roomWith(4));
+    expect(count(expectOk(await tooMany.start.execute({ roomId: 'r1', playerId: 'p0', seekers: 99 })))).toBe(3);
+  });
 });

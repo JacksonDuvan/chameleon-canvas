@@ -30,6 +30,17 @@ import { RoomForm } from '@/features/matchmaking/components/RoomForm';
 import { worldStore } from '@/features/canvas-3d/store/worldStore';
 import { useAudio } from '@/features/canvas-3d/audio/useAudio';
 import { Hud } from '@/shared/components/Hud';
+import { PostFx } from '@/features/canvas-3d/components/PostFx';
+
+const FX_KEY = 'mecha.fx';
+/** Preferencia de gráficos (posprocesado). Por defecto ALTO; se recuerda por navegador. */
+function readFx(): boolean {
+  try {
+    return window.localStorage.getItem(FX_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
 
 export const Route = createFileRoute('/')({ component: Home });
 
@@ -77,15 +88,27 @@ function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
   const sockets = useGameSockets(session);
   useLocalInput(sockets);
   useAudio(); // V1-H: SFX + ambiente + silbidos (presentación pura)
+  const [fx, setFx] = useState(readFx);
+  const toggleFx = (): void => {
+    const next = !fx;
+    setFx(next);
+    try {
+      window.localStorage.setItem(FX_KEY, next ? 'on' : 'off');
+    } catch {
+      /* almacenamiento bloqueado: la preferencia vale solo para esta sesión */
+    }
+  };
 
   return (
     <main style={{ position: 'fixed', inset: 0, margin: 0 }}>
-      {/* Renderer: sombras PCFSoft + tone mapping NEUTRAL (Khronos PBR Neutral).
-          ACES desaturaba y viraba los tonos; en un juego de IGUALAR colores el
-          color en pantalla debe parecerse al de la paleta del mapa. */}
+      {/* Renderer: sombras PCFSoft + tone mapping NEUTRAL (Khronos PBR Neutral; ACES
+          desaturaba los tonos que hay que IGUALAR). El tone mapping lo aplica
+          `PostFx` (al final de la cadena de efectos, o el renderer en modo bajo).
+          dpr ≤1.5: el posprocesado a 2× en pantallas retina cuesta el doble. */}
       <Canvas
         shadows="soft"
-        gl={{ toneMapping: THREE.NeutralToneMapping, toneMappingExposure: 1.05 }}
+        dpr={[1, 1.5]}
+        gl={{ toneMapping: THREE.NoToneMapping, powerPreference: 'high-performance' }}
         camera={{ position: [0, 12, 16], fov: 60 }}
       >
         {/* Niebla suave a color de horizonte (bajo el cielo de drei): profundidad barata.
@@ -94,11 +117,14 @@ function Game({ session, onLeave }: { session: Session; onLeave: () => void }) {
         <fog attach="fog" args={['#cfdce8', 60, 170]} />
         <Scene />
         <Controles sockets={sockets} />
+        <PostFx enabled={fx} />
       </Canvas>
       <Hud
-        onStart={() => sockets.sendControl({ type: 'start' })}
+        onStart={(seekers) => sockets.sendControl({ type: 'start', seekers })}
         onRestart={() => sockets.sendControl({ type: 'restart' })}
         onLeave={onLeave}
+        fx={fx}
+        onToggleFx={toggleFx}
       />
     </main>
   );

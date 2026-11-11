@@ -61,6 +61,7 @@ function mkCmd(playerId: string, over: Partial<UserCommand> = {}): UserCommand {
     aimZ: 1,
     pose: 0,
     action: ActionKind.NONE,
+    jump: false,
     ...over,
   };
 }

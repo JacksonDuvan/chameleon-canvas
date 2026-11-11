@@ -14,6 +14,7 @@
 import {
   applyAim,
   applyMovement,
+  applyVertical,
   canMove,
   clampPose,
   DEFAULT_MAP,
@@ -42,6 +43,8 @@ export interface AuthoritativeLocal {
   readonly frozen: boolean;
   readonly caught: boolean;
   readonly pose: number;
+  readonly vy: number; // eje vertical (salto): necesario para re-predecir en el aire
+  readonly grounded: boolean;
 }
 
 /** Predice un input sobre el jugador local (mismas funciones que el servidor).
@@ -55,7 +58,10 @@ export function predict(
   map: MapData = DEFAULT_MAP,
 ): void {
   applyAim(local, input.cmd);
-  if (canMove(phase, local)) applyMovement(local, input.cmd, cfg, input.dt, map);
+  const mobile = canMove(phase, local);
+  if (mobile) applyMovement(local, input.cmd, cfg, input.dt, map);
+  // Eje vertical: MISMA regla que step.ts (gravedad siempre; salto solo si se mueve).
+  applyVertical(local, mobile && input.cmd.jump, cfg, input.dt, map);
   // Pose: MISMA regla de validación que el servidor (step.ts) para converger.
   if (local.role === 'hider' && !local.frozen && phase === 'prep') {
     local.pose = clampPose(input.cmd.pose);
@@ -89,6 +95,8 @@ export function reconcile(
   local.frozen = auth.frozen;
   local.caught = auth.caught;
   local.pose = auth.pose;
+  local.vy = auth.vy;
+  local.grounded = auth.grounded;
   local.lastProcessedInput = auth.lastProcessedInput;
 
   // 2) Descarta los inputs que el servidor ya contabilizó.

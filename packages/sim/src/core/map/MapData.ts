@@ -29,6 +29,19 @@ export type ZoneShape = 'box' | 'cylinder' | 'sphere' | 'figure' | 'figureWall';
 /** Mueble de oficina (pista de render; ver `MapZone.furniture`). */
 export type FurnitureKind = 'cabinet' | 'desk' | 'terminal' | 'stool';
 
+/**
+ * Dimensiones y acabado de los muebles de oficina. ÚNICA fuente de verdad: el
+ * generador los coloca con estas medidas y las poses de mimetismo del Hider
+ * (`POSE_CABINET`…) se dibujan con las MISMAS ⇒ un Hider hecho mesa mide lo que
+ * una mesa del mapa.
+ */
+export const FURNITURE_SPECS = {
+  cabinet: { w: 0.9, h: 2.1, d: 0.7, color: 0x6b7280, rough: 0.8, metal: 0 },
+  desk: { w: 1.6, h: 0.75, d: 0.8, color: 0x8a6b4a, rough: 0.7, metal: 0 },
+  terminal: { w: 0.6, h: 1.4, d: 0.5, color: 0x3d4450, rough: 0.5, metal: 0.3 },
+  stool: { w: 0.6, h: 0.9, d: 0.6, color: 0x44506b, rough: 0.85, metal: 0 },
+} as const;
+
 /** Región rectangular del escenario (AABB en el plano XZ, con altura) + su material. */
 export interface MapZone {
   readonly id: string;
@@ -665,12 +678,7 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
     // (Box/Cylinder) vía 'box'/'cylinder': cero cambios de wire/render. Son
     // SÓLIDOS: el servidor los conoce (oclusión de disparos, camuflaje al
     // abrazarlos, anti-cheat).
-    const OFFICE = {
-      cabinet: { w: 0.9, h: 2.1, d: 0.7, color: 0x6b7280, rough: 0.8, metal: 0 },
-      desk: { w: 1.6, h: 0.75, d: 0.8, color: 0x8a6b4a, rough: 0.7, metal: 0 },
-      terminal: { w: 0.6, h: 1.4, d: 0.5, color: 0x3d4450, rough: 0.5, metal: 0.3 },
-      stool: { w: 0.6, h: 0.9, d: 0.6, color: 0x44506b, rough: 0.85, metal: 0 },
-    } as const;
+    const OFFICE = FURNITURE_SPECS;
     const officeKinds = ['cabinet', 'desk', 'terminal', 'stool'] as const;
     const CORNER: ReadonlyArray<readonly [number, number]> = [
       [-1.05, -1.05], [1.05, -1.05], [-1.05, 1.05], [1.05, 1.05],
@@ -735,7 +743,7 @@ function planToMapData(plan: HousePlan, seed: number): MapData {
 
   return {
     id: `casa-${(seed >>> 0) || 1}`,
-    bounds: { minX: -W / 2, maxX: W / 2, minY: 0, maxY: 5, minZ: -H / 2, maxZ: H / 2 },
+    bounds: { minX: -W / 2, maxX: W / 2, minY: 0, maxY: 6, minZ: -H / 2, maxZ: H / 2 },
     floorColor: rgb(0xcfcabc),
     zones,
     // Spawn: intersección de la cruz (hall central 8×8 m, libre de sólidos).

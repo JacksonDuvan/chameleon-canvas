@@ -15,6 +15,9 @@ const MIN_PLAYERS = 2;
 export interface StartGameCmd {
   readonly roomId: string;
   readonly playerId: string; // debe ser el host
+  /** Cuántos buscan (opción del host). Ausente ⇒ reparto automático. El kernel lo
+   *  sanea a [1, jugadores − 1]. */
+  readonly seekers?: number;
 }
 
 export class StartGame {
@@ -35,7 +38,7 @@ export class StartGame {
     // Enhebra el estado del RNG: la asignación de roles lo consume y avanza, así el
     // stream continúa coherente en los ticks posteriores (ProcessTick).
     const rng = makeRng(room.world.rngState);
-    startGame(room.world, rng);
+    startGame(room.world, rng, cmd.seekers);
     room.world.rngState = rng.getState();
 
     const saved = await this.rooms.save(room);

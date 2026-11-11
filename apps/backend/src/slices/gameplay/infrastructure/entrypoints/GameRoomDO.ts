@@ -251,7 +251,7 @@ export class GameRoomDO extends DurableObject<Env> {
   }
 
   private async handleControl(ws: WebSocket, playerId: string, raw: string): Promise<void> {
-    let msg: { type?: string; r?: number; g?: number; b?: number; a?: number };
+    let msg: { type?: string; r?: number; g?: number; b?: number; a?: number; seekers?: number };
     try {
       msg = JSON.parse(raw) as typeof msg;
     } catch {
@@ -262,7 +262,14 @@ export class GameRoomDO extends DurableObject<Env> {
     // Los use-cases devuelven Result; si fallan (NotHost, WrongPhase, ColorLocked,
     // StorageError…) se avisa al cliente con un frame de error (no se silencia).
     if (msg.type === 'start') {
-      const res = await this.startGame.execute({ roomId: room.id, playerId });
+      // `seekers` (opción del host): solo enteros; el kernel lo acota a [1, n−1].
+      const seekers =
+        typeof msg.seekers === 'number' && Number.isInteger(msg.seekers) ? msg.seekers : undefined;
+      const res = await this.startGame.execute({
+        roomId: room.id,
+        playerId,
+        ...(seekers !== undefined ? { seekers } : {}),
+      });
       if (res.ok) this.forceKeyframe = true;
       else ws.send(JSON.stringify({ type: 'error', cmd: 'start', kind: res.error.kind }));
     } else if (msg.type === 'restart') {

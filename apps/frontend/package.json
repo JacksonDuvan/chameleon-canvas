@@ -24,6 +24,8 @@
     "three": "catalog:",
     "@react-three/fiber": "catalog:",
     "@react-three/drei": "catalog:",
+    "postprocessing": "catalog:",
+    "n8ao": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {

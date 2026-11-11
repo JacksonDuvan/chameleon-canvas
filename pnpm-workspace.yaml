@@ -44,6 +44,10 @@ catalog:
   '@types/three': ^0.171.0
   '@react-three/fiber': ^9.0.0
   '@react-three/drei': ^10.0.0
+  # Posprocesado (playtest r6: salto gráfico). Se usa la librería base, NO el wrapper
+  # @react-three/postprocessing: su v3 exige fiber >=9.7 y aquí va 9.6.
+  postprocessing: ^6.39.0
+  n8ao: ^2.0.0 # oclusión ambiental en espacio de pantalla (pase para postprocessing)
   zustand: ^5.0.0 # store vanilla (zustand/vanilla) para el worldStore
 
   # ── Build / Vite ──

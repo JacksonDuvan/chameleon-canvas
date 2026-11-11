@@ -21,10 +21,21 @@
 import { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { DEFAULT_SIM_CONFIG, POSE_COUNT, POSE_CROUCH, POSE_STAND } from '@mecha/sim';
+import {
+  DEFAULT_SIM_CONFIG,
+  FURNITURE_SPECS,
+  POSE_CABINET,
+  POSE_COUNT,
+  POSE_CROUCH,
+  POSE_DESK,
+  POSE_STAND,
+  POSE_STOOL,
+  POSE_TERMINAL,
+} from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { sampleRemote, sampleLocalMut, INTERP_DELAY_MS } from '../hooks/interpolation';
 import { buildPoseGeometries } from './avatarGeometry';
+import { applySurfaceDetail } from './surfaceDetail';
 
 const MAX_PLAYERS = 16;
 const TICK_MS = 1000 / DEFAULT_SIM_CONFIG.tickHz;
@@ -101,7 +112,25 @@ export function Players() {
   // Material LISO con el MISMO roughness que los señuelos del mapa (AVATAR_ROUGHNESS):
   // un jugador pintado junto a una estatua no debe delatarse por el brillo.
   const geometries = useMemo(() => buildPoseGeometries(), []);
-  const material = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.8 }), []);
+  // Las poses de MUEBLE copian el acabado (roughness/metalness + flat-shading) del
+  // mueble del mapa que imitan: si no, el brillo delataría al Hider.
+  const materials = useMemo(() => {
+    // Mismo relieve procedural que el escenario (espacio de mundo): un Hider pintado
+    // como un muro muestra el grano del muro — el detalle no lo delata.
+    const base = applySurfaceDetail(new THREE.MeshStandardMaterial({ roughness: 0.8 }));
+    const out = new Array<THREE.MeshStandardMaterial>(POSE_COUNT).fill(base);
+    const furn = (pose: number, kind: keyof typeof FURNITURE_SPECS): void => {
+      const s = FURNITURE_SPECS[kind];
+      out[pose] = applySurfaceDetail(
+        new THREE.MeshStandardMaterial({ roughness: s.rough, metalness: s.metal, flatShading: true }),
+      );
+    };
+    furn(POSE_CABINET, 'cabinet');
+    furn(POSE_DESK, 'desk');
+    furn(POSE_TERMINAL, 'terminal');
+    furn(POSE_STOOL, 'stool');
+    return out;
+  }, []);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.1);
@@ -223,7 +252,7 @@ export function Players() {
           ref={(m) => {
             refs.current[pi] = m;
           }}
-          args={[geo, material, MAX_PLAYERS]}
+          args={[geo, materials[pi]!, MAX_PLAYERS]}
           castShadow
           receiveShadow
           // El culling usa la bounding sphere de la GEOMETRÍA (en el origen): con la

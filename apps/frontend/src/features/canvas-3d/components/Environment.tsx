@@ -32,11 +32,12 @@ import { useStore } from 'zustand';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { Sky } from '@react-three/drei';
-import { DEFAULT_SIM_CONFIG, POSE_FLAT, POSE_STAND, type FurnitureKind } from '@mecha/sim';
+import { DEFAULT_SIM_CONFIG, POSE_FLAT, POSE_STAND } from '@mecha/sim';
 import { worldStore } from '../store/worldStore';
 import { buildPoseGeometries, SPHERE_SEGS_W, SPHERE_SEGS_H } from './avatarGeometry';
 import { sampleLocalMut } from '../hooks/interpolation';
+import { getFurnitureUnit } from './furnitureGeometry';
+import { applySurfaceDetail } from './surfaceDetail';
 
 /** Roughness de los avatares (`MechaMesh`): señuelos y bolas lo COMPARTEN. */
 const AVATAR_ROUGHNESS = 0.8;
@@ -106,15 +107,18 @@ function getMaterial(
   const key = `${packed}|${roughness}|${metalness}|${flat}|${emissive}|${emissiveIntensity}`;
   let m = materialCache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({
-      color: toColor(packed),
-      roughness,
-      metalness,
-      flatShading: flat,
-      ...(emissive
-        ? { emissive: toColor(emissive), emissiveIntensity }
-        : {}),
-    });
+    // Relieve procedural en espacio de mundo (grano + bump; baldosas en suelos, que
+    // son los únicos materiales no-flat del mapa). Ver `surfaceDetail`.
+    m = applySurfaceDetail(
+      new THREE.MeshStandardMaterial({
+        color: toColor(packed),
+        roughness,
+        metalness,
+        flatShading: flat,
+        ...(emissive ? { emissive: toColor(emissive), emissiveIntensity } : {}),
+      }),
+      !flat && roughness < 0.6,
+    );
     materialCache.set(key, m);
   }
   return m;
@@ -147,78 +151,6 @@ function buildLampGeometry(): THREE.BufferGeometry {
   cap.dispose();
   if (!merged) throw new Error('Environment: fusión de lámpara fallida');
   return merged;
-}
-
-/** Caja en espacio UNITARIO (−0.5..0.5): pieza de un mueble compuesto. */
-function part(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): THREE.BufferGeometry {
-  return new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-}
-
-/**
- * Muebles de oficina DETALLADOS (solo presentación). Cada uno es una fusión de
- * cajas en espacio unitario que se escala al AABB de la zona: el volumen que
- * conoce el servidor (colisión/oclusión/camuflaje) es EXACTAMENTE el mismo.
- * Un solo material (el color de la zona): el relieve lo lee el flat-shading.
- * Simétricos en Z/X: el generador no orienta los muebles.
- */
-function buildFurnitureGeometries(): Record<Exclude<FurnitureKind, 'stool'>, THREE.BufferGeometry> {
-  const fuse = (parts: THREE.BufferGeometry[]): THREE.BufferGeometry => {
-    const merged = mergeGeometries(parts, false);
-    for (const p of parts) p.dispose();
-    if (!merged) throw new Error('Environment: fusión de mueble fallida');
-    return merged;
-  };
-  return {
-    // Mesa: tablero + dos costados + cajonera retranqueada.
-    desk: fuse([
-      part(-0.5, 0.5, 0.36, 0.5, -0.5, 0.5),
-      part(-0.5, -0.45, -0.5, 0.36, -0.46, 0.46),
-      part(0.45, 0.5, -0.5, 0.36, -0.46, 0.46),
-      part(0.12, 0.45, -0.3, 0.36, -0.4, 0.4),
-      part(-0.45, 0.12, 0.0, 0.36, -0.06, 0.06),
-    ]),
-    // Archivador: cuerpo retranqueado + 4 frentes de cajón + tapa y zócalo.
-    cabinet: fuse([
-      part(-0.47, 0.47, -0.5, 0.5, -0.46, 0.46),
-      part(-0.5, 0.5, 0.46, 0.5, -0.5, 0.5),
-      part(-0.5, 0.5, -0.5, -0.46, -0.5, 0.5),
-      part(-0.42, 0.42, 0.24, 0.43, -0.5, 0.5),
-      part(-0.42, 0.42, 0.01, 0.2, -0.5, 0.5),
-      part(-0.42, 0.42, -0.22, -0.03, -0.5, 0.5),
-      part(-0.42, 0.42, -0.43, -0.26, -0.5, 0.5),
-    ]),
-    // Terminal-kiosco: peana + columna + cabezal con visera.
-    terminal: fuse([
-      part(-0.5, 0.5, -0.5, -0.44, -0.5, 0.5),
-      part(-0.3, 0.3, -0.44, 0.1, -0.3, 0.3),
-      part(-0.5, 0.5, 0.1, 0.44, -0.42, 0.42),
-      part(-0.44, 0.44, 0.44, 0.5, -0.5, 0.5),
-    ]),
-  };
-}
-let furnitureCache: ReturnType<typeof buildFurnitureGeometries> | null = null;
-function getFurnitureGeometries(): ReturnType<typeof buildFurnitureGeometries> {
-  if (!furnitureCache) furnitureCache = buildFurnitureGeometries();
-  return furnitureCache;
-}
-
-/** Taburete: asiento + fuste + base (perfil torneado, 1 draw call, unitario). */
-let stoolCache: THREE.BufferGeometry | null = null;
-function getStoolGeometry(): THREE.BufferGeometry {
-  if (!stoolCache) {
-    const pts = [
-      new THREE.Vector2(0.0, -0.5),
-      new THREE.Vector2(0.42, -0.5),
-      new THREE.Vector2(0.42, -0.44),
-      new THREE.Vector2(0.12, -0.4),
-      new THREE.Vector2(0.1, 0.24),
-      new THREE.Vector2(0.5, 0.3),
-      new THREE.Vector2(0.5, 0.5),
-      new THREE.Vector2(0.0, 0.5),
-    ];
-    stoolCache = new THREE.LatheGeometry(pts, 12);
-  }
-  return stoolCache;
 }
 
 /** Posiciones de lámparas: centros de suelos, retícula ~8 m (frío, por mapa). */
@@ -493,7 +425,7 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
       new THREE.MeshStandardMaterial({
         color: LAMP_COLOR,
         emissive: LAMP_COLOR,
-        emissiveIntensity: 2.4,
+        emissiveIntensity: 4.5, // HDR: por encima del umbral del bloom (PostFx)
       }),
     [],
   );
@@ -533,6 +465,48 @@ function Lamps({ lamps }: { lamps: ReadonlyArray<{ x: number; z: number }> }) {
       <instancedMesh key={`l${Math.max(1, lamps.length)}`} ref={ref} args={[geo, mat, Math.max(1, lamps.length)]} frustumCulled={false} userData={NO_SAMPLE} />
       <instancedMesh key={`b${Math.max(1, lamps.length)}`} ref={bulbRef} args={[bulbGeo, bulbMat, Math.max(1, lamps.length)]} frustumCulled={false} userData={NO_SAMPLE} />
     </>
+  );
+}
+
+/**
+ * SkyDome — cielo de DEGRADADO propio (horizonte claro → cénit azul) + disco solar.
+ * Sustituye al cielo físico de drei: con el buffer HDR del posprocesado su franja
+ * de dispersión se salía de rango y aparecía una BANDA morada cruzando el cielo.
+ * Un degradado acotado es estable en ambos modos de calidad; el sol va en HDR
+ * (color > 1) para que el bloom le dé halo. `noSample` + sin niebla ni depth.
+ */
+const SKY_HORIZON = new THREE.Color('#cfdce8'); // = color de la niebla (index.tsx)
+const SKY_ZENITH = new THREE.Color('#4f8fd6');
+const SKY_GEO = (() => {
+  const g = new THREE.SphereGeometry(380, 32, 16);
+  const pos = g.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const h = Math.max(0, pos.getY(i) / 380); // 0 horizonte → 1 cénit
+    c.copy(SKY_HORIZON).lerp(SKY_ZENITH, Math.pow(h, 0.55));
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return g;
+})();
+const SKY_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+const SUN_GEO = new THREE.SphereGeometry(9, 16, 12);
+const SUN_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.6, 2.8), fog: false });
+const SUN_DISC_POS = new THREE.Vector3(...SUN_POSITION).normalize().multiplyScalar(340);
+function SkyDome() {
+  const ref = useRef<THREE.Group>(null);
+  // La cúpula sigue a la cámara: el cielo está "en el infinito".
+  useFrame(({ camera }) => {
+    ref.current?.position.set(camera.position.x, 0, camera.position.z);
+  });
+  return (
+    <group ref={ref}>
+      <mesh geometry={SKY_GEO} material={SKY_MAT} renderOrder={-10} frustumCulled={false} userData={NO_SAMPLE} />
+      <mesh geometry={SUN_GEO} material={SUN_MAT} position={SUN_DISC_POS} frustumCulled={false} userData={NO_SAMPLE} />
+    </group>
   );
 }
 
@@ -599,10 +573,8 @@ export function Environment() {
         scale[0] = 1;
         scale[1] = 1;
         scale[2] = 1;
-      } else if (z.furniture === 'stool') {
-        geometry = getStoolGeometry(); // unitario: escala = AABB de la zona
       } else if (z.furniture) {
-        geometry = getFurnitureGeometries()[z.furniture];
+        geometry = getFurnitureUnit(z.furniture); // unitario: escala = AABB de la zona
       } else if (z.shape === 'cylinder') {
         geometry = UNIT_CYL;
         const diam = Math.min(w, d);
@@ -638,8 +610,8 @@ export function Environment() {
 
   return (
     <>
-      {/* Cielo físico (día suave; el sol diagonal lo comparte la luz con sombras). */}
-      <Sky sunPosition={SUN_POSITION} turbidity={4.5} rayleigh={1} mieCoefficient={0.004} />
+      {/* Cielo: cúpula de degradado propia + disco solar (ver `SkyDome`). */}
+      <SkyDome />
       {/* ── Iluminación interior (spec r4) ── */}
       {/* Relleno tenue y FRÍO de sombras (spec: #223344 · 0.4). */}
       <ambientLight color={AMBIENT_COLOR} intensity={AMBIENT_INTENSITY} />

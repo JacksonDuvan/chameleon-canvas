@@ -12,7 +12,7 @@ const DT = 1 / 30;
 const cfg = DEFAULT_SIM_CONFIG;
 
 function cmd(playerId: string, over: Partial<UserCommand> = {}): UserCommand {
-  return { seq: 1, playerId, moveX: 0, moveZ: 0, aimX: 0, aimY: 0, aimZ: 1, pose: 0, action: ActionKind.NONE, ...over };
+  return { seq: 1, playerId, moveX: 0, moveZ: 0, aimX: 0, aimY: 0, aimZ: 1, pose: 0, action: ActionKind.NONE, jump: false, ...over };
 }
 
 describe('canMove', () => {

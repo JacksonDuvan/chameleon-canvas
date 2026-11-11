@@ -41,6 +41,7 @@ export interface InputIntent {
   readonly aimZ: number;
   readonly pose: number; // pose deseada del Hider (V1-B)
   readonly action: ActionKind;
+  readonly jump: boolean; // Espacio mantenido (playtest r6)
 }
 
 export interface GameSockets {

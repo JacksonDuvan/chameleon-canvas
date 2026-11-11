@@ -27,4 +27,6 @@ export interface UserCommand {
   readonly aimZ: number;
   readonly pose: number; // pose deseada del Hider 0..3 (el servidor sanea y valida fase/rol)
   readonly action: ActionKind;
+  /** Intención de SALTAR (Espacio mantenido). El servidor valida apoyo y fase. */
+  readonly jump: boolean;
 }

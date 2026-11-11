@@ -21,10 +21,13 @@ const RECOIL_MS = 170; // duración del retroceso tras cada disparo
 const REST = { x: 0.36, y: -0.3, z: -0.6 } as const; // esquina inferior derecha
 
 const NO_SAMPLE = { noSample: true };
-/** El arma se dibuja DESPUÉS del mundo y con el depth limpio: pegado a un muro,
- *  el cañón ya no se "mete" en la pared (playtest r5). */
-const GUN_ORDER = 11;
-const _clearDepth = (renderer: THREE.WebGLRenderer): void => renderer.clearDepth();
+/**
+ * El arma se dibuja MINIATURIZADA y pegada a la cámara (escala × distancia: en
+ * pantalla se ve idéntica). Así, pegado a un muro, el cañón no se mete en la pared
+ * (el jugador nunca está a menos de su radio, 0.5 m) y el buffer de profundidad
+ * queda intacto para la oclusión ambiental del posprocesado.
+ */
+const VIEW_SCALE = 0.3;
 
 export function SeekerViewmodel() {
   const camera = useThree((s) => s.camera);
@@ -32,10 +35,11 @@ export function SeekerViewmodel() {
   const gun = useRef<THREE.Group>(null!);
   const sway = useRef({ phase: 0, amp: 0, px: 0, pz: 0 });
 
-  const { bodyGeo, barrelGeo, gripGeo, dark, accent, clearGeo, clearMat } = useMemo(
+  const { bodyGeo, barrelGeo, gripGeo, sightGeo, tankGeo, dark, accent, paint } = useMemo(
     () => ({
-      clearGeo: new THREE.PlaneGeometry(0.001, 0.001),
-      clearMat: new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false }),
+      sightGeo: new THREE.BoxGeometry(0.018, 0.03, 0.05),
+      tankGeo: new THREE.CylinderGeometry(0.03, 0.03, 0.11, 12),
+      paint: new THREE.MeshStandardMaterial({ color: '#ffb300', roughness: 0.25, metalness: 0.1, emissive: '#7a4a00', emissiveIntensity: 0.6 }),
       bodyGeo: new THREE.BoxGeometry(0.09, 0.11, 0.34),
       barrelGeo: new THREE.CylinderGeometry(0.028, 0.028, 0.26, 10),
       gripGeo: new THREE.BoxGeometry(0.07, 0.16, 0.09),
@@ -71,34 +75,27 @@ export function SeekerViewmodel() {
     w.position.set(
       REST.x + Math.sin(s.phase) * 0.012 * s.amp,
       REST.y + Math.abs(Math.cos(s.phase)) * 0.014 * s.amp + kick * 0.02,
-      REST.z + kick * 0.09,
+      REST.z + kick * 0.06,
     );
     w.rotation.set(kick * 0.22, -0.06, 0);
   });
 
   return (
-    <group ref={group} visible={false}>
+    <group ref={group} visible={false} scale={VIEW_SCALE}>
       {/* Offset local: esquina inferior derecha, apuntando al frente (-Z local). */}
       <group ref={gun} position={[REST.x, REST.y, REST.z]} rotation={[0, -0.06, 0]} scale={0.85}>
-        {/* Malla invisible que limpia el depth justo antes de las piezas del arma. */}
-        <mesh
-          geometry={clearGeo}
-          material={clearMat}
-          renderOrder={GUN_ORDER - 1}
-          frustumCulled={false}
-          onBeforeRender={_clearDepth}
-          userData={NO_SAMPLE}
-        />
-        <mesh geometry={bodyGeo} material={dark} renderOrder={GUN_ORDER} userData={NO_SAMPLE} />
+        <mesh geometry={bodyGeo} material={dark} userData={NO_SAMPLE} />
+        {/* Mira + depósito de pintura (lectura de "pistola de pintura"). */}
+        <mesh geometry={sightGeo} material={accent} position={[0, 0.07, -0.12]} userData={NO_SAMPLE} />
+        <mesh geometry={tankGeo} material={paint} rotation-x={Math.PI / 2} position={[0, 0.082, 0.07]} userData={NO_SAMPLE} />
         <mesh
           geometry={barrelGeo}
           material={accent}
           rotation-x={Math.PI / 2}
           position={[0, 0.015, -0.27]}
-          renderOrder={GUN_ORDER}
           userData={NO_SAMPLE}
         />
-        <mesh geometry={gripGeo} material={dark} position={[0, -0.12, 0.09]} rotation-x={0.25} renderOrder={GUN_ORDER} userData={NO_SAMPLE} />
+        <mesh geometry={gripGeo} material={dark} position={[0, -0.12, 0.09]} rotation-x={0.25} userData={NO_SAMPLE} />
       </group>
     </group>
   );

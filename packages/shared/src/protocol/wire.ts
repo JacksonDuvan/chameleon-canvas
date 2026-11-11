@@ -29,12 +29,16 @@ import type { UserCommand } from './commands';
 // generan el MISMO mapa con `generateMap(mapSeed)` — el mapa no viaja entero.
 // v6 (más figuras de mimetismo: caja, barril): la pose pasa de 2 a 3 bits (0..7) en
 // los bits 3-5 de roleFlags — el bit 3 estaba RESERVADO. INPUT ya la manda como u8.
-export const PROTOCOL_VERSION = 6;
+// v7 (playtest r6: SALTO + muebles como poses): la pose pasa a 4 bits (0..15, bits
+// 3-6 de roleFlags) y el bit 7 lleva `grounded`; el snapshot añade `vy` (i16, cm/s)
+// para reconciliar el eje vertical; el INPUT añade un byte de flags (bit0 = saltar).
+export const PROTOCOL_VERSION = 7;
 export const MAX_SNAPSHOT_BYTES = 8192;
 export const MAX_INPUT_BYTES = 64;
 
 const POS_SCALE = 100; // punto fijo: metros → centímetros (int16: ±327 m)
 const DIR_SCALE = 1000; // movimiento/apunte normalizado → int16
+const VEL_SCALE = 100; // velocidad vertical: m/s → cm/s (int16: ±327 m/s)
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -63,6 +67,8 @@ export interface WirePlayer {
   readonly camoScore: number; // 0..1 (P0.2)
   readonly pose: number; // pose del Hider 0..3 (V1-B; viaja en bits 4-5 de roleFlags)
   readonly ammo: number; // disparos restantes del Seeker (v4; HUD de munición)
+  readonly vy: number; // velocidad vertical (v7; salto)
+  readonly grounded: boolean; // apoyado en suelo/mueble (v7)
 }
 export interface WireWorld {
   readonly tick: number;
@@ -91,6 +97,8 @@ export interface DecodedPlayer {
   camoScore: number; // 0..1 (P0.2)
   pose: number; // pose del Hider 0..3 (V1-B)
   ammo: number; // disparos restantes del Seeker (v4)
+  vy: number; // velocidad vertical (v7)
+  grounded: boolean; // apoyado (v7)
 }
 export interface DecodedSnapshot {
   type: 'keyframe' | 'delta';
@@ -180,6 +188,10 @@ class ByteReader {
   get offset(): number {
     return this.o;
   }
+  /** Bytes que quedan por leer. */
+  get left(): number {
+    return this.view.byteLength - this.o;
+  }
 }
 
 // Buffers pooleados de ámbito de módulo (un isolate monohilo).
@@ -187,12 +199,13 @@ const _snapWriter = new ByteWriter(new ArrayBuffer(MAX_SNAPSHOT_BYTES));
 const _inputWriter = new ByteWriter(new ArrayBuffer(MAX_INPUT_BYTES));
 
 function packRoleFlags(p: WirePlayer): number {
-  // role(bit0) frozen(bit1) caught(bit2) pose(bits 3-5, 0..7 — v6: caja/barril).
+  // role(bit0) frozen(bit1) caught(bit2) pose(bits 3-6, 0..15 — v7) grounded(bit7).
   return (
     (p.role === 'seeker' ? 1 : 0) |
     (p.frozen ? 2 : 0) |
     (p.caught ? 4 : 0) |
-    ((p.pose & 7) << 3)
+    ((p.pose & 15) << 3) |
+    (p.grounded ? 128 : 0)
   );
 }
 function packColor(c: WirePlayer['color']): number {
@@ -211,6 +224,7 @@ export function encodeInput(input: InputPayload): Uint8Array {
   w.i16(Math.round(input.aimZ * DIR_SCALE));
   w.u8(input.action);
   w.u8(input.pose & 0xff);
+  w.u8(input.jump ? 1 : 0); // flags (v7): bit0 = saltar
   return w.bytes();
 }
 
@@ -225,7 +239,9 @@ export function decodeInput(data: ArrayBuffer): InputPayload {
   const aimZ = r.i16() / DIR_SCALE;
   const action = r.u8() as InputPayload['action'];
   const pose = r.u8();
-  return { seq, moveX, moveZ, aimX, aimY, aimZ, action, pose };
+  // Tolerante con un cliente v6 aún abierto tras el deploy (sin byte de flags).
+  const jump = r.left > 0 ? (r.u8() & 1) === 1 : false;
+  return { seq, moveX, moveZ, aimX, aimY, aimZ, action, pose, jump };
 }
 
 // ── SNAPSHOT (servidor → cliente) ──
@@ -242,6 +258,7 @@ function writePlayer(w: ByteWriter, p: WirePlayer): void {
   w.u32(packColor(p.color));
   w.u8(packScore(p.camoScore));
   w.u8(p.ammo > 255 ? 255 : p.ammo & 0xff);
+  w.i16(Math.round(p.vy * VEL_SCALE));
 }
 
 function writeHeader(w: ByteWriter, world: WireWorld, type: number, count: number): void {
@@ -290,6 +307,7 @@ function playerSignature(p: WirePlayer): number {
   mix(p.lastProcessedInput);
   mix(packScore(p.camoScore));
   mix(p.ammo);
+  mix(Math.round(p.vy * VEL_SCALE));
   return h;
 }
 
@@ -335,13 +353,16 @@ export function decodeSnapshot(data: ArrayBuffer): DecodedSnapshot {
     const colorPacked = r.u32();
     const camoScore = r.u8() / 255;
     const ammo = r.u8();
+    const vy = r.i16() / VEL_SCALE;
     players.push({
       id,
       lastProcessedInput,
       role: (flags & 1) === 1 ? 'seeker' : 'hider',
       frozen: (flags & 2) === 2,
       caught: (flags & 4) === 4,
-      pose: (flags >> 3) & 7,
+      pose: (flags >> 3) & 15,
+      grounded: (flags & 128) === 128,
+      vy,
       x,
       y,
       z,

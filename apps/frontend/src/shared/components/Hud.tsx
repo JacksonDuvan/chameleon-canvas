@@ -97,7 +97,35 @@ function useLocalStatus(): LocalStatus {
   return status;
 }
 
-const POSE_LABEL = ['De pie', 'Agachado', 'Bola', 'Plano (pared)', 'Caja', 'Barril'];
+const POSE_LABEL = [
+  'De pie', 'Agachado', 'Bola', 'Plano', 'Caja', 'Barril',
+  'Archivador', 'Mesa', 'Terminal', 'Taburete',
+];
+/** Tecla que elige cada pose directamente (1..9 y 0 para la décima). */
+const poseKey = (i: number): string => String((i + 1) % 10);
+
+/**
+ * Selector de cuántos BUSCAN (opción del host, playtest r6). El resto se esconde.
+ * Rango [1, jugadores − 1]: siempre queda al menos un Hider (el servidor lo vuelve
+ * a acotar — la UI solo evita valores imposibles).
+ */
+function SeekerPicker({ players, value, onChange }: { players: number; value: number; onChange: (n: number) => void }) {
+  const max = Math.max(1, players - 1);
+  const v = Math.min(Math.max(1, value), max);
+  return (
+    <div className="hud-seekers" role="group" aria-label="Cuántos buscan">
+      <span className="hud-seekers-label">Buscan</span>
+      <button type="button" className="hud-step" onClick={() => onChange(v - 1)} disabled={v <= 1} aria-label="Un Seeker menos">
+        −
+      </button>
+      <span className="hud-seekers-value">{v}</span>
+      <button type="button" className="hud-step" onClick={() => onChange(v + 1)} disabled={v >= max} aria-label="Un Seeker más">
+        +
+      </button>
+      <span className="hud-seekers-rest">se esconden {Math.max(0, players - v)}</span>
+    </div>
+  );
+}
 
 /**
  * Hiders vivos/atrapados (feedback de captura para TODOS, como la fila de muñecos del
@@ -207,11 +235,17 @@ export function Hud({
   onStart,
   onRestart,
   onLeave,
+  fx,
+  onToggleFx,
 }: {
-  onStart: () => void;
+  /** `seekers` = cuántos buscan (elegido por el host en el lobby). */
+  onStart: (seekers: number) => void;
   onRestart: () => void;
   /** V1-E: salir de la sala (vuelve al RoomForm y limpia la sesión). */
   onLeave: () => void;
+  /** Gráficos altos (posprocesado) activos + conmutador (para equipos modestos). */
+  fx: boolean;
+  onToggleFx: () => void;
 }) {
   const phase = useStore(worldStore, (s) => s.phase);
   const roomId = useStore(worldStore, (s) => s.roomId);
@@ -224,6 +258,8 @@ export function Hud({
   const revealList = useStore(worldStore, (s) => s.revealList);
   const endedAt = useStore(worldStore, (s) => s.endedAt);
   const localPlayerId = useStore(worldStore, (s) => s.localPlayerId);
+  const rosterSize = useStore(worldStore, (s) => s.lobbyRoster.length);
+  const [seekers, setSeekers] = useState(1);
   const countdown = usePhaseCountdown(phase);
   const status = useLocalStatus();
   const justCaught = useJustCaught(status.caught);
@@ -271,9 +307,18 @@ export function Hud({
         <div className="hud-cluster hud-cluster--right">
           <span className="hud-chip hud-chip--muted hud-chip--controls">
             {localRole === 'seeker'
-              ? 'WASD mover · ratón mirar · click disparar'
-              : 'WASD mover · ratón mirar · E absorber · R pose · T silbar'}
+              ? 'WASD mover · Espacio saltar · click disparar'
+              : 'WASD mover · Espacio saltar · E absorber · R/1-0 pose · T silbar'}
           </span>
+          <button
+            type="button"
+            className="hud-chip hud-chip--audio"
+            onClick={onToggleFx}
+            aria-pressed={fx}
+            title="Calidad gráfica (bájala si el juego va lento)"
+          >
+            ✨ {fx ? 'Alto' : 'Bajo'}
+          </button>
           <AudioToggle />
           <span className="hud-chip hud-chip--muted">{connected ? '● conectado' : '○ desconectado'}</span>
         </div>
@@ -320,9 +365,14 @@ export function Hud({
           <span className="hud-chip">🖱 Haz clic en el juego para controlar la cámara (ESC suelta)</span>
         )}
         {showCamo && (
-          <span className="hud-chip hud-chip--muted">
-            🧘 Pose: {POSE_LABEL[status.pose] ?? 'De pie'} — R para cambiar
-          </span>
+          <div className="hud-poses" aria-label="Figuras en las que puedes convertirte">
+            {POSE_LABEL.map((label, i) => (
+              <span key={label} className={`hud-pose${i === status.pose ? ' hud-pose--on' : ''}`}>
+                <kbd>{poseKey(i)}</kbd>
+                {label}
+              </span>
+            ))}
+          </div>
         )}
         {showCamo && (
           <div className="hud-camo">
@@ -359,8 +409,15 @@ export function Hud({
             <span className="hud-roomcode-hint">compártelo para que se unan</span>
           </div>
           <PlayerList />
+          {isHost && rosterSize >= 2 && (
+            <SeekerPicker players={rosterSize} value={seekers} onChange={setSeekers} />
+          )}
           {isHost ? (
-            <button type="button" onClick={onStart} className="hud-btn">
+            <button
+              type="button"
+              onClick={() => onStart(Math.min(Math.max(1, seekers), Math.max(1, rosterSize - 1)))}
+              className="hud-btn"
+            >
               ▶ Empezar partida
             </button>
           ) : (

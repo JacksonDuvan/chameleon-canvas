@@ -45,6 +45,8 @@ interface PlayerSnapshot {
   pose?: number; // estado de ronda (V1-B/7.5); opcionales por retro-compatibilidad
   ammo?: number;
   shotCooldownUntil?: number;
+  jumpVy?: number; // salto (playtest r6); opcionales por retro-compatibilidad
+  grounded?: boolean;
 }
 
 interface RoomSnapshot {
@@ -88,6 +90,8 @@ function toSnapshot(room: Room): RoomSnapshot {
       pose: p.pose,
       ammo: p.ammo,
       shotCooldownUntil: p.shotCooldownUntil,
+      jumpVy: p.vy,
+      grounded: p.grounded,
     });
   }
   const roster = [...room.roster.values()].map((p) => ({
@@ -134,6 +138,8 @@ function fromSnapshot(s: RoomSnapshot): Room {
     p.pose = ps.pose ?? 0;
     p.ammo = ps.ammo ?? 0;
     p.shotCooldownUntil = ps.shotCooldownUntil ?? 0;
+    p.vy = ps.jumpVy ?? 0;
+    p.grounded = ps.grounded ?? true;
     p.color.setMut(ps.r, ps.g, ps.b, ps.a);
     p.frozen = ps.frozen;
     p.caught = ps.caught;

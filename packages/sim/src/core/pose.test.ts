@@ -12,18 +12,27 @@ import {
   POSE_BODY_CY,
   POSE_BODY_R,
   POSE_BOX,
+  POSE_CABINET,
   POSE_COUNT,
   POSE_CROUCH,
   POSE_CYLINDER,
+  POSE_DESK,
   POSE_FLAT,
   POSE_STAND,
+  POSE_STOOL,
+  POSE_TERMINAL,
 } from './pose';
 
 describe('poses', () => {
-  it('son 6: de pie, agachado, bola, plano, caja, barril', () => {
-    expect(POSE_COUNT).toBe(6);
-    expect(new Set([POSE_STAND, POSE_CROUCH, POSE_BALL, POSE_FLAT, POSE_BOX, POSE_CYLINDER]).size).toBe(6);
-    for (const p of [POSE_STAND, POSE_CROUCH, POSE_BALL, POSE_FLAT, POSE_BOX, POSE_CYLINDER]) {
+  const ALL = [
+    POSE_STAND, POSE_CROUCH, POSE_BALL, POSE_FLAT, POSE_BOX, POSE_CYLINDER,
+    POSE_CABINET, POSE_DESK, POSE_TERMINAL, POSE_STOOL,
+  ];
+  it('son 10: las 6 de siempre + los 4 muebles de oficina (caben en 4 bits del wire)', () => {
+    expect(POSE_COUNT).toBe(10);
+    expect(POSE_COUNT).toBeLessThanOrEqual(16);
+    expect(new Set(ALL).size).toBe(10);
+    for (const p of ALL) {
       expect(p).toBeGreaterThanOrEqual(0);
       expect(p).toBeLessThan(POSE_COUNT);
     }

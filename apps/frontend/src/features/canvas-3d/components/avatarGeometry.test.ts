@@ -20,7 +20,12 @@ import {
   POSE_COUNT,
   POSE_CROUCH,
   POSE_CYLINDER,
+  POSE_DESK,
   POSE_FLAT,
+  POSE_CABINET,
+  POSE_TERMINAL,
+  POSE_STOOL,
+  FURNITURE_SPECS,
 } from '@mecha/sim';
 import { buildPoseGeometries, VISUAL_FRINGE } from './avatarGeometry';
 
@@ -68,7 +73,10 @@ describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
       const cy = POSE_BODY_CY[p]!;
       const r = POSE_BODY_R[p]!;
       expect(bb.max.y, `pose ${p}: techo`).toBeLessThanOrEqual(cy + r + VISUAL_FRINGE);
-      for (const v of [bb.min.x, bb.max.x, bb.min.z, bb.max.z]) {
+      // La MESA es alargada (1.6 m): su esfera cubre el centro y las puntas quedan
+      // fuera a propósito (ver pose.ts). Su eje largo se exime; el corto no.
+      const extents = p === POSE_DESK ? [bb.min.z, bb.max.z] : [bb.min.x, bb.max.x, bb.min.z, bb.max.z];
+      for (const v of extents) {
         expect(Math.abs(v), `pose ${p}: planta`).toBeLessThanOrEqual(r + VISUAL_FRINGE);
       }
     }
@@ -119,5 +127,23 @@ describe('buildPoseGeometries (silueta por pose vs hitbox del server)', () => {
     const max = Math.max(...dims);
     const min = Math.min(...dims);
     expect((max - min) / max).toBeLessThanOrEqual(0.12);
+  });
+
+  it('las poses de MUEBLE miden exactamente lo que el mueble del mapa (mimetismo)', () => {
+    const cases = [
+      [POSE_CABINET, FURNITURE_SPECS.cabinet],
+      [POSE_DESK, FURNITURE_SPECS.desk],
+      [POSE_TERMINAL, FURNITURE_SPECS.terminal],
+      [POSE_STOOL, FURNITURE_SPECS.stool],
+    ] as const;
+    for (const [pose, spec] of cases) {
+      const g = geometries[pose]!;
+      g.computeBoundingBox();
+      const bb = g.boundingBox!;
+      expect(bb.max.x - bb.min.x, `pose ${pose}: ancho`).toBeCloseTo(spec.w, 5);
+      expect(bb.max.y - bb.min.y, `pose ${pose}: alto`).toBeCloseTo(spec.h, 5);
+      expect(bb.max.z - bb.min.z, `pose ${pose}: fondo`).toBeCloseTo(spec.d, 5);
+      expect(bb.min.y).toBeCloseTo(0, 5);
+    }
   });
 });

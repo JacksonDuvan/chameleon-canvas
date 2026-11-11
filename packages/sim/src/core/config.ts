@@ -25,6 +25,10 @@ export interface SimConfig {
   readonly ammoLimitEnabled: boolean;
   readonly shotAmmo: number; // munición inicial por Seeker (solo en modo limitado)
   readonly shotCooldownTicks: number; // ticks mínimos entre disparos (anti-spray, siempre)
+  // ── Salto (playtest r6) ──
+  readonly gravity: number; // m/s² (hacia abajo)
+  readonly jumpSpeed: number; // impulso del Hider: sube a muebles bajos (mesa, caja, taburete)
+  readonly seekerJumpSpeed: number; // impulso del Seeker: MUCHO más alto, asoma sobre los muros
 }
 
 const HZ = 30;
@@ -47,9 +51,15 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   huntDurationTicks: HZ * 180, // 180 s
   colorLockTicks: HZ * 1, // 1 s
   // DEBE coincidir con DEFAULT_MAP.bounds (una sola verdad efectiva; test lo fuerza).
-  bounds: { minX: -40, maxX: 40, minY: 0, maxY: 5, minZ: -32, maxZ: 32 },
+  bounds: { minX: -40, maxX: 40, minY: 0, maxY: 6, minZ: -32, maxZ: 32 },
   camoMovePenalty: 0.85, // moverse a máxima velocidad te delata casi por completo
   ammoLimitEnabled: false, // base fiel al original: sin límite (el modo estricto es opt-in)
   shotAmmo: 10, // munición inicial del modo limitado
   shotCooldownTicks: Math.round(HZ * 0.6), // ~0.6 s entre disparos
+  // Salto: ápice = v²/(2g). Hider ≈1.3 m (alcanza mesas 0.75, taburetes 0.9 y cajas
+  // 1.1; NO barriles ni archivadores). Seeker ≈3.6 m: sus ojos pasan de 5 m y ven
+  // por encima de los muros de 3 m (los muros nunca son pisables).
+  gravity: 20,
+  jumpSpeed: 7.2,
+  seekerJumpSpeed: 12,
 };
